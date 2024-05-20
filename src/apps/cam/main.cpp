@@ -119,6 +119,7 @@ int CamApp::exec()
 int CamApp::parseOptions(int argc, char *argv[])
 {
 	StreamKeyValueParser streamKeyValue;
+	SensorKeyValueParser sensorKeyValue;
 
 	OptionsParser parser;
 	parser.addOption(OptCamera, OptionString,
@@ -188,6 +189,9 @@ int CamApp::parseOptions(int argc, char *argv[])
 	parser.addOption(OptCaptureScript, OptionString,
 			 "Load a capture session configuration script from a file",
 			 "script", ArgumentRequired, "script", false,
+			 OptCamera);
+	parser.addOption(OptSensorFmt, &sensorKeyValue,
+			 "Apply a format to the sensor", "sensor_format", true,
 			 OptCamera);
 
 	options_ = parser.parse(argc, argv);

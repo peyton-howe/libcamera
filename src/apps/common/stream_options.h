@@ -27,3 +27,11 @@ public:
 private:
 	static std::optional<libcamera::StreamRole> parseRole(const KeyValueParser::Options &options);
 };
+
+class SensorKeyValueParser : public KeyValueParser
+{
+public:
+	SensorKeyValueParser();
+	static int updateConfiguration(libcamera::CameraConfiguration *config,
+				       const OptionValue &values);
+};

@@ -118,3 +118,45 @@ std::optional<libcamera::StreamRole> StreamKeyValueParser::parseRole(const KeyVa
 
 	return {};
 }
+
+SensorKeyValueParser::SensorKeyValueParser()
+{
+	addOption("bitDepth", OptionInteger, "Sensor format bit depth",
+		  ArgumentRequired);
+	addOption("width", OptionInteger, "Sensor frame width in pixels",
+		  ArgumentRequired);
+	addOption("height", OptionInteger, "Sensor frame height in pixels",
+		  ArgumentRequired);
+}
+
+int SensorKeyValueParser::updateConfiguration(CameraConfiguration *config,
+					      const OptionValue &values)
+{
+	if (!config) {
+		std::cerr << "No configuration provided" << std::endl;
+		return -EINVAL;
+	}
+
+	/* If no configuration values nothing to do. */
+	if (values.empty())
+		return 0;
+
+	const std::vector<OptionValue> &streamParameters = values.toArray();
+	SensorConfiguration sensorConfig;
+
+	for (auto const &value : streamParameters) {
+		KeyValueParser::Options opts = value.toKeyValues();
+
+		if (opts.isSet("width") && opts.isSet("height")) {
+			sensorConfig.outputSize.width = opts["width"];
+			sensorConfig.outputSize.height = opts["height"];
+		}
+
+		if (opts.isSet("bitDepth"))
+			sensorConfig.bitDepth = opts["bitDepth"];
+	}
+
+	config->sensorConfig = sensorConfig;
+
+	return 0;
+}

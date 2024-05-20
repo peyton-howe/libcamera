@@ -118,6 +118,13 @@ CameraSession::CameraSession(CameraManager *cm,
 		return;
 	}
 
+	/* Apply a sensor configuration is requested. */
+	if (SensorKeyValueParser::updateConfiguration(config.get(),
+						      options_[OptSensorFmt])) {
+		std::cerr << "Failed to apply sensor configuration" << std::endl;
+		return;
+	}
+
 	bool strictFormats = options_.isSet(OptStrictFormats);
 
 #ifdef HAVE_KMS

@@ -19,6 +19,7 @@ enum {
 	OptMonitor = 'm',
 	OptOrientation = 'o',
 	OptSDL = 'S',
+	OptSensorFmt = 'f',
 	OptStream = 's',
 	OptVersion = 'v',
 	OptListControls = 256,

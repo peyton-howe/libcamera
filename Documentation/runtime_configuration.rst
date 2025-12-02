@@ -81,6 +81,8 @@ Configuration file example
          supported_devices:
            - driver: mxc-isi
              software_isp: true
+       rkisp2:
+         isp_enable: true
      software_isp:
        copy_input_buffer: false
        measure:
@@ -156,6 +158,13 @@ pipelines.simple.supported_devices.driver, pipelines.simple.supported_devices.so
    Example `driver` value: ``mxc-isi``
 
    Example `software_isp` value: ``true``
+
+pipelines.rkisp2.isp_enable
+   Configure whether or not to use the ISP. Default (when unconfigured) is
+   true. When set to false the ISP will not be used, so only the VICAP will be
+   used for capture.
+
+   Example value: ``false``
 
 software_isp.copy_input_buffer
    Define whether input buffers should be copied into standard (cached)

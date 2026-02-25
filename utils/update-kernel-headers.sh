@@ -56,6 +56,7 @@ headers="
 	linux/media-bus-format.h
 	linux/media.h
 	linux/media/arm/mali-c55-config.h
+	linux/media/rockchip/rkisp2-config.h
 	linux/media/v4l2-isp.h
 	linux/rkisp1-config.h
 	linux/stddef.h

@@ -24,6 +24,7 @@
 #include "libcamera/internal/matrix.h"
 #include "libcamera/internal/vector.h"
 
+#include "libipa/agc.h"
 #include "libipa/agc_mean_luminance.h"
 #include "libipa/awb.h"
 #include "libipa/camera_sensor_helper.h"
@@ -51,7 +52,7 @@ struct RKISP2AwbSession {
 };
 
 struct IPASessionConfiguration {
-	struct {
+	struct Agc : agc::Session {
 		struct rkisp2_isp_window measureWindow;
 		struct rkisp2_isp_window measureWindow15;
 	} agc;
@@ -59,13 +60,6 @@ struct IPASessionConfiguration {
 	struct RKISP2AwbSession awb;
 
 	struct {
-		utils::Duration minExposureTime;
-		utils::Duration maxExposureTime;
-		double minAnalogueGain;
-		double maxAnalogueGain;
-
-		int32_t defVBlank;
-		utils::Duration lineDuration;
 		Size size;
 	} sensor;
 
@@ -78,27 +72,7 @@ struct IPASessionConfiguration {
 };
 
 struct IPAActiveState {
-	struct {
-		struct {
-			uint32_t exposure;
-			double gain;
-		} manual;
-		struct {
-			uint32_t exposure;
-			double gain;
-			double quantizationGain;
-			double yTarget;
-		} automatic;
-
-		bool autoExposureEnabled;
-		bool autoGainEnabled;
-		double exposureValue;
-		controls::AeConstraintModeEnum constraintMode;
-		controls::AeExposureModeEnum exposureMode;
-		controls::AeMeteringModeEnum meteringMode;
-		utils::Duration minFrameDuration;
-		utils::Duration maxFrameDuration;
-	} agc;
+	agc::ActiveState agc;
 
 	ipa::awb::ActiveState awb;
 
@@ -133,25 +107,7 @@ struct IPAActiveState {
 };
 
 struct IPAFrameContext : public FrameContext {
-	struct {
-		uint32_t exposure;
-		double gain;
-		double exposureValue;
-		double quantizationGain;
-		uint32_t vblank;
-		double yTarget;
-		bool autoExposureEnabled;
-		bool autoGainEnabled;
-		controls::AeConstraintModeEnum constraintMode;
-		controls::AeExposureModeEnum exposureMode;
-		controls::AeMeteringModeEnum meteringMode;
-		utils::Duration minFrameDuration;
-		utils::Duration maxFrameDuration;
-		utils::Duration frameDuration;
-		bool updateMetering;
-		bool autoExposureModeChange;
-		bool autoGainModeChange;
-	} agc;
+	agc::FrameContext agc;
 
 	ipa::awb::FrameContext awb;
 
@@ -193,6 +149,7 @@ struct IPAContext {
 
 	IPAHwSettings hw;
 	IPACameraSensorInfo sensorInfo;
+	ControlInfoMap sensorControls;
 	IPASessionConfiguration configuration;
 	IPAActiveState activeState;
 

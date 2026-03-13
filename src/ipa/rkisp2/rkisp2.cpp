@@ -6,11 +6,10 @@
  */
 
 #include <algorithm>
-#include <array>
-#include <chrono>
 #include <functional>
 #include <stdint.h>
 #include <string.h>
+#include <tuple>
 
 #include <linux/media/rockchip/rkisp2-config.h>
 #include <linux/v4l2-controls.h>
@@ -39,8 +38,6 @@
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(IPARkISP2)
-
-using namespace std::literals::chrono_literals;
 
 namespace ipa::rkisp2 {
 
@@ -75,16 +72,12 @@ protected:
 	std::string logPrefix() const override;
 
 private:
-	void updateControls(const IPACameraSensorInfo &sensorInfo,
-			    const ControlInfoMap &sensorControls,
-			    ControlInfoMap *ipaControls);
+	void updateControls(ControlInfoMap *ipaControls);
 
 	void setControls(unsigned int frame, const IPAFrameContext &frameContext);
 
 	std::map<unsigned int, FrameBuffer> buffers_;
 	std::map<unsigned int, MappedFrameBuffer> mappedBuffers_;
-
-	ControlInfoMap sensorControls_;
 
 	/* Local parameter storage */
 	struct IPAContext context_;
@@ -119,6 +112,7 @@ int IPARkISP2::init(const IPASettings &settings,
 		    ControlInfoMap *ipaControls)
 {
 	context_.sensorInfo = sensorInfo;
+	context_.sensorControls = sensorControls;
 
 	context_.camHelper = CameraSensorHelperFactoryBase::create(settings.sensorModel);
 	if (!context_.camHelper) {
@@ -127,9 +121,6 @@ int IPARkISP2::init(const IPASettings &settings,
 			<< settings.sensorModel;
 		return -ENODEV;
 	}
-
-	context_.configuration.sensor.lineDuration =
-		sensorInfo.minLineLength * 1.0s / sensorInfo.pixelRate;
 
 	/* Load the tuning data file. */
 	File file(settings.configurationFile);
@@ -163,7 +154,7 @@ int IPARkISP2::init(const IPASettings &settings,
 		return ret;
 
 	/* Initialize controls. */
-	updateControls(sensorInfo, sensorControls, ipaControls);
+	updateControls(ipaControls);
 
 	return 0;
 }
@@ -182,49 +173,15 @@ void IPARkISP2::stop()
 int IPARkISP2::configure(const IPAConfigInfo &ipaConfig,
 			 ControlInfoMap *ipaControls)
 {
-	sensorControls_ = ipaConfig.sensorControls;
-
-	const auto itExp = sensorControls_.find(V4L2_CID_EXPOSURE);
-	int32_t minExposure = itExp->second.min().get<int32_t>();
-	int32_t maxExposure = itExp->second.max().get<int32_t>();
-
-	const auto itGain = sensorControls_.find(V4L2_CID_ANALOGUE_GAIN);
-	int32_t minGain = itGain->second.min().get<int32_t>();
-	int32_t maxGain = itGain->second.max().get<int32_t>();
-
-	LOG(IPARkISP2, Debug)
-		<< "Exposure: [" << minExposure << ", " << maxExposure
-		<< "], gain: [" << minGain << ", " << maxGain << "]";
+	context_.sensorInfo = ipaConfig.sensorInfo;
+	context_.sensorControls = ipaConfig.sensorControls;
 
 	/* Clear the IPA context before the streaming session. */
 	context_.configuration = {};
 	context_.activeState = {};
 	context_.frameContexts.clear();
 
-	const IPACameraSensorInfo &info = ipaConfig.sensorInfo;
-	const ControlInfo vBlank = sensorControls_.find(V4L2_CID_VBLANK)->second;
-	context_.configuration.sensor.defVBlank = vBlank.def().get<int32_t>();
-	context_.configuration.sensor.size = info.outputSize;
-	context_.configuration.sensor.lineDuration = info.minLineLength * 1.0s / info.pixelRate;
-
-	/* Update the camera controls using the new sensor settings. */
-	updateControls(info, sensorControls_, ipaControls);
-
-	/*
-	 * When the AGC computes the new exposure values for a frame, it needs
-	 * to know the limits for exposure time and analogue gain. As it depends
-	 * on the sensor, update it with the controls.
-	 *
-	 * \todo take VBLANK into account for maximum exposure time
-	 */
-	context_.configuration.sensor.minExposureTime =
-		minExposure * context_.configuration.sensor.lineDuration;
-	context_.configuration.sensor.maxExposureTime =
-		maxExposure * context_.configuration.sensor.lineDuration;
-	context_.configuration.sensor.minAnalogueGain =
-		context_.camHelper->gain(minGain);
-	context_.configuration.sensor.maxAnalogueGain =
-		context_.camHelper->gain(maxGain);
+	context_.configuration.sensor.size = context_.sensorInfo.outputSize;
 
 	context_.configuration.csm.colorSpaceEncoding = ipaConfig.colorSpaceEncoding;
 	context_.configuration.csm.colorSpaceRange = ipaConfig.colorSpaceRange;
@@ -232,10 +189,12 @@ int IPARkISP2::configure(const IPAConfigInfo &ipaConfig,
 	for (const auto &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
 
-		int ret = algo->configure(context_, info);
+		int ret = algo->configure(context_, context_.sensorInfo);
 		if (ret)
 			return ret;
 	}
+
+	updateControls(ipaControls);
 
 	return 0;
 }
@@ -305,10 +264,8 @@ void IPARkISP2::processStats(const uint32_t frame, const uint32_t bufferId,
 
 	RkISP2Stats stats(mappedBuffers_.at(bufferId).planes()[0]);
 
-	frameContext.sensor.exposure =
-		sensorControls.get(V4L2_CID_EXPOSURE).get<int32_t>();
-	frameContext.sensor.gain =
-		context_.camHelper->gain(sensorControls.get(V4L2_CID_ANALOGUE_GAIN).get<int32_t>());
+	std::tie(frameContext.sensor.exposure, frameContext.sensor.gain) =
+		agc::extractControls(sensorControls, context_.camHelper.get());
 
 	ControlList metadata(controls::controls);
 
@@ -328,78 +285,26 @@ void IPARkISP2::setControls(unsigned int frame, const IPAFrameContext &frameCont
 	 */
 
 	uint32_t exposure = frameContext.agc.exposure;
-	uint32_t gain = context_.camHelper->gainCode(frameContext.agc.gain);
 	uint32_t vblank = frameContext.agc.vblank;
 
 	LOG(IPARkISP2, Debug)
 		<< "Set controls for frame " << frame << ": exposure " << exposure
 		<< ", gain " << frameContext.agc.gain << ", vblank " << vblank;
 
-	ControlList ctrls(sensorControls_);
-	if (frameContext.agc.exposure * frameContext.agc.gain > 0) {
-		ctrls.set(V4L2_CID_EXPOSURE, static_cast<int32_t>(exposure));
-		ctrls.set(V4L2_CID_ANALOGUE_GAIN, static_cast<int32_t>(gain));
-	}
+	ControlList ctrls(context_.sensorControls);
+	if (frameContext.agc.exposure * frameContext.agc.gain > 0)
+		agc::prepareControls(ctrls, context_.camHelper.get(),
+				     exposure, frameContext.agc.gain);
 	ctrls.set(V4L2_CID_VBLANK, static_cast<int32_t>(vblank));
 
 	setSensorControls.emit(frame, ctrls);
 }
 
-void IPARkISP2::updateControls(const IPACameraSensorInfo &sensorInfo,
-			       const ControlInfoMap &sensorControls,
-			       ControlInfoMap *ipaControls)
+void IPARkISP2::updateControls(ControlInfoMap *ipaControls)
 {
 	ControlInfoMap::Map ctrlMap = rkisp2Controls;
 
-	/*
-	 * Compute exposure time limits from the V4L2_CID_EXPOSURE control
-	 * limits and the line duration.
-	 */
-	double lineDuration = context_.configuration.sensor.lineDuration.get<std::micro>();
-	const ControlInfo &v4l2Exposure = sensorControls.find(V4L2_CID_EXPOSURE)->second;
-	int32_t minExposure = v4l2Exposure.min().get<int32_t>() * lineDuration;
-	int32_t maxExposure = v4l2Exposure.max().get<int32_t>() * lineDuration;
-	int32_t defExposure = v4l2Exposure.def().get<int32_t>() * lineDuration;
-	ctrlMap.emplace(std::piecewise_construct,
-			std::forward_as_tuple(&controls::ExposureTime),
-			std::forward_as_tuple(minExposure, maxExposure, defExposure));
-
-	/* Compute the analogue gain limits. */
-	const ControlInfo &v4l2Gain = sensorControls.find(V4L2_CID_ANALOGUE_GAIN)->second;
-	float minGain = context_.camHelper->gain(v4l2Gain.min().get<int32_t>());
-	float maxGain = context_.camHelper->gain(v4l2Gain.max().get<int32_t>());
-	float defGain = context_.camHelper->gain(v4l2Gain.def().get<int32_t>());
-	ctrlMap.emplace(std::piecewise_construct,
-			std::forward_as_tuple(&controls::AnalogueGain),
-			std::forward_as_tuple(minGain, maxGain, defGain));
-
-	/*
-	 * Compute the frame duration limits.
-	 *
-	 * The frame length is computed assuming a fixed line length combined
-	 * with the vertical frame sizes.
-	 */
-	const ControlInfo &v4l2HBlank = sensorControls.find(V4L2_CID_HBLANK)->second;
-	uint32_t hblank = v4l2HBlank.def().get<int32_t>();
-	uint32_t lineLength = sensorInfo.outputSize.width + hblank;
-
-	const ControlInfo &v4l2VBlank = sensorControls.find(V4L2_CID_VBLANK)->second;
-	std::array<uint32_t, 3> frameHeights{
-		v4l2VBlank.min().get<int32_t>() + sensorInfo.outputSize.height,
-		v4l2VBlank.max().get<int32_t>() + sensorInfo.outputSize.height,
-		v4l2VBlank.def().get<int32_t>() + sensorInfo.outputSize.height,
-	};
-
-	std::array<int64_t, 3> frameDurations;
-	for (unsigned int i = 0; i < frameHeights.size(); ++i) {
-		uint64_t frameSize = lineLength * frameHeights[i];
-		frameDurations[i] = frameSize / (sensorInfo.pixelRate / 1000000U);
-	}
-
-	/* \todo Move this (and other agc-related controls) to agc */
-	context_.ctrlMap[&controls::FrameDurationLimits] =
-		ControlInfo(frameDurations[0], frameDurations[1],
-			    ControlValue(Span<const int64_t, 2>{ { frameDurations[2], frameDurations[2] } }));
+	const IPACameraSensorInfo &sensorInfo = context_.sensorInfo;
 
 	Rectangle ispMinCrop{ 0, 0, 32, 32 };
 	/*

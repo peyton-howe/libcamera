@@ -169,6 +169,8 @@ private:
 
 	void setControls(unsigned int frame);
 	void calculateBdsGrid(const Size &bdsOutputSize);
+	void initializeFrameContext(IPAFrameContext &frameContext,
+				    const ControlList &controls);
 
 	std::map<unsigned int, MappedFrameBuffer> buffers_;
 
@@ -181,6 +183,10 @@ private:
 IPAIPU3::IPAIPU3()
 	: context_(kMaxFrameContexts)
 {
+	context_.frameContexts.setInitCallback(
+		[this](IPAFrameContext &fc, const ControlList &c) {
+			this->initializeFrameContext(fc, c);
+		});
 }
 
 std::string IPAIPU3::logPrefix() const
@@ -467,7 +473,7 @@ void IPAIPU3::computeParams(const uint32_t frame, const uint32_t bufferId)
 	 */
 	params->use = {};
 
-	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
+	IPAFrameContext &frameContext = context_.frameContexts.getOrInitContext(frame);
 
 	for (const auto &algo : algorithms())
 		algo->prepare(context_, frame, frameContext, params);
@@ -500,7 +506,7 @@ void IPAIPU3::processStats(const uint32_t frame,
 	const ipu3_uapi_stats_3a *stats =
 		reinterpret_cast<ipu3_uapi_stats_3a *>(mem.data());
 
-	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
+	IPAFrameContext &frameContext = context_.frameContexts.getOrInitContext(frame);
 
 	std::tie(frameContext.sensor.exposure, frameContext.sensor.gain) =
 		agc::extractControls(sensorControls, context_.camHelper.get());
@@ -533,10 +539,14 @@ void IPAIPU3::processStats(const uint32_t frame,
  */
 void IPAIPU3::queueRequest(const uint32_t frame, const ControlList &controls)
 {
-	IPAFrameContext &frameContext = context_.frameContexts.alloc(frame);
+	context_.frameContexts.getOrInitContext(frame, controls);
+}
 
+void IPAIPU3::initializeFrameContext(IPAFrameContext &frameContext,
+				     const ControlList &controls)
+{
 	for (const auto &algo : algorithms())
-		algo->queueRequest(context_, frame, frameContext, controls);
+		algo->queueRequest(context_, frameContext.frame(), frameContext, controls);
 }
 
 /**
@@ -548,7 +558,7 @@ void IPAIPU3::queueRequest(const uint32_t frame, const ControlList &controls)
  */
 void IPAIPU3::setControls(unsigned int frame)
 {
-	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
+	IPAFrameContext &frameContext = context_.frameContexts.getOrInitContext(frame);
 
 	ControlList ctrls(context_.sensorControls);
 	agc::prepareControls(ctrls, context_.camHelper.get(),

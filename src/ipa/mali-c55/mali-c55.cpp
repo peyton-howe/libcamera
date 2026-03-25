@@ -66,6 +66,8 @@ protected:
 
 private:
 	void updateControls(ControlInfoMap *ipaControls);
+	void initializeFrameContext(IPAFrameContext &frameContext,
+				    const ControlList &controls);
 	void setControls(const IPAFrameContext &frameContext);
 
 	std::map<unsigned int, MappedFrameBuffer> buffers_;
@@ -81,6 +83,10 @@ namespace {
 IPAMaliC55::IPAMaliC55()
 	: context_(kMaxFrameContexts)
 {
+	context_.frameContexts.setInitCallback(
+		[this](IPAFrameContext &fc, const ControlList &c) {
+			this->initializeFrameContext(fc, c);
+		});
 }
 
 std::string IPAMaliC55::logPrefix() const
@@ -219,21 +225,25 @@ void IPAMaliC55::unmapBuffers(const std::vector<IPABuffer> &buffers)
 	}
 }
 
-void IPAMaliC55::queueRequest(const uint32_t request, const ControlList &controls)
+void IPAMaliC55::queueRequest(const uint32_t frame, const ControlList &controls)
 {
-	IPAFrameContext &frameContext = context_.frameContexts.alloc(request);
+	context_.frameContexts.getOrInitContext(frame, controls);
+}
 
+void IPAMaliC55::initializeFrameContext(IPAFrameContext &frameContext,
+					const ControlList &controls)
+{
 	for (const auto &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
 
-		algo->queueRequest(context_, request, frameContext, controls);
+		algo->queueRequest(context_, frameContext.frame(), frameContext, controls);
 	}
 }
 
 void IPAMaliC55::fillParams(unsigned int request,
 			    [[maybe_unused]] uint32_t bufferId)
 {
-	IPAFrameContext &frameContext = context_.frameContexts.get(request);
+	IPAFrameContext &frameContext = context_.frameContexts.getOrInitContext(request);
 	MaliC55Params params(buffers_.at(bufferId).planes()[0]);
 
 	for (const auto &algo : algorithms())
@@ -245,7 +255,7 @@ void IPAMaliC55::fillParams(unsigned int request,
 void IPAMaliC55::processStats(unsigned int request, unsigned int bufferId,
 			      const ControlList &sensorControls)
 {
-	IPAFrameContext &frameContext = context_.frameContexts.get(request);
+	IPAFrameContext &frameContext = context_.frameContexts.getOrInitContext(request);
 	const mali_c55_stats_buffer *stats = nullptr;
 
 	stats = reinterpret_cast<mali_c55_stats_buffer *>(

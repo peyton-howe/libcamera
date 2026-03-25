@@ -48,6 +48,10 @@ public:
 	IPASoftIsp()
 		: context_(kMaxFrameContexts)
 	{
+		context_.frameContexts.setInitCallback(
+			[this](IPAFrameContext &fc, const ControlList &c) {
+				this->initializeFrameContext(fc, c);
+			});
 	}
 
 	~IPASoftIsp();
@@ -75,6 +79,8 @@ protected:
 
 private:
 	void updateExposure(double exposureMSV);
+	void initializeFrameContext(IPAFrameContext &frameContext,
+				    const ControlList &controls);
 
 	DebayerParams *params_;
 	SwIspStats *stats_;
@@ -216,17 +222,21 @@ void IPASoftIsp::stop()
 
 void IPASoftIsp::queueRequest(const uint32_t frame, const ControlList &controls)
 {
-	IPAFrameContext &frameContext = context_.frameContexts.alloc(frame);
+	context_.frameContexts.getOrInitContext(frame, controls);
+}
 
+void IPASoftIsp::initializeFrameContext(IPAFrameContext &frameContext,
+					   const ControlList &controls)
+{
 	for (const auto &algo : algorithms())
-		algo->queueRequest(context_, frame, frameContext, controls);
+		algo->queueRequest(context_, frameContext.frame(), frameContext, controls);
 }
 
 void IPASoftIsp::computeParams(const uint32_t frame)
 {
 	context_.activeState.combinedMatrix = Matrix<float, 3, 3>::identity();
 
-	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
+	IPAFrameContext &frameContext = context_.frameContexts.getOrInitContext(frame);
 	for (const auto &algo : algorithms())
 		algo->prepare(context_, frame, frameContext, params_);
 	params_->combinedMatrix = context_.activeState.combinedMatrix;
@@ -238,7 +248,7 @@ void IPASoftIsp::processStats(const uint32_t frame,
 			      [[maybe_unused]] const uint32_t bufferId,
 			      const ControlList &sensorControls)
 {
-	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
+	IPAFrameContext &frameContext = context_.frameContexts.getOrInitContext(frame);
 
 	std::tie(frameContext.sensor.exposure, frameContext.sensor.gain) =
 		agc::extractControls(sensorControls, context_.camHelper.get());

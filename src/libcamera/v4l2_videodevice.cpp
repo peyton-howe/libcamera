@@ -1902,19 +1902,6 @@ FrameBuffer *V4L2VideoDevice::dequeueBuffer()
 	if (V4L2_TYPE_IS_OUTPUT(buf.type))
 		return buffer;
 
-	/*
-	 * Detect kernel drivers which do not reset the sequence number to zero
-	 * on stream start.
-	 */
-	if (!firstFrame_.has_value()) {
-		if (buf.sequence)
-			LOG(V4L2, Info)
-				<< "Zero sequence expected for first frame (got "
-				<< buf.sequence << ")";
-		firstFrame_ = buf.sequence;
-	}
-	metadata.sequence -= firstFrame_.value();
-
 	Span<const FrameBuffer::Plane> framebufferPlanes = buffer->planes();
 	unsigned int numV4l2Planes = multiPlanar ? buf.length : 1;
 
@@ -1990,8 +1977,6 @@ FrameBuffer *V4L2VideoDevice::dequeueBuffer()
 int V4L2VideoDevice::streamOn()
 {
 	int ret;
-
-	firstFrame_.reset();
 
 	ret = ioctl(VIDIOC_STREAMON, &bufferType_);
 	if (ret < 0) {

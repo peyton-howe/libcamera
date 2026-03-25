@@ -35,6 +35,8 @@ public:
 	bool push(uint32_t sequence, const ControlList &controls);
 	ControlList get(uint32_t sequence);
 
+	uint32_t maxDelay() const { return maxDelay_; }
+
 	void applyControls(uint32_t sequence);
 
 private:

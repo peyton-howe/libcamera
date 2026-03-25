@@ -240,7 +240,7 @@ bool DelayedControls::push(uint32_t sequence, const ControlList &controls)
  */
 ControlList DelayedControls::get(uint32_t sequence)
 {
-	unsigned int index = std::max<int>(0, sequence - maxDelay_);
+	unsigned int index = sequence;
 
 	ControlList out(device_->controls());
 	for (const auto &ctrl : values_) {
@@ -266,13 +266,14 @@ ControlList DelayedControls::get(uint32_t sequence)
  */
 
 /**
- * \brief Inform DelayedControls of the start of a new frame
- * \param[in] sequence Sequence number of the frame that started
+ * \brief Apply controls for a frame
+ * \param[in] sequence Sequence number of the frame to apply
  *
- * Inform the state machine that a new frame has started and of its sequence
- * number. Any user of these helpers is responsible to inform the helper about
- * the start of any frame. This can be connected with ease to the start of a
- * exposure (SOE) V4L2 event.
+ * Apply controls for the frame \a sequence. This applies the controls with the
+ * largest delay. For controls with a smaller delay it does a look back and
+ * applies the controls for the previous sequence. So usually this function is
+ * called in a start of exposure event as applyControls(startedSequence +
+ * maxDelay)
  */
 void DelayedControls::applyControls(uint32_t sequence)
 {

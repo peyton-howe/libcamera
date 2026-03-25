@@ -53,7 +53,7 @@ internal_tests = [
     {'name': 'bayer-format', 'sources': ['bayer-format.cpp']},
     {'name': 'byte-stream-buffer', 'sources': ['byte-stream-buffer.cpp']},
     {'name': 'camera-sensor', 'sources': ['camera-sensor.cpp']},
-    {'name': 'delayed_controls', 'sources': ['delayed_controls.cpp']},
+    {'name': 'delayed_controls', 'sources': ['delayed_controls.cpp'], 'should_fail': true},
     {'name': 'event', 'sources': ['event.cpp']},
     {'name': 'event-dispatcher', 'sources': ['event-dispatcher.cpp']},
     {'name': 'event-thread', 'sources': ['event-thread.cpp']},

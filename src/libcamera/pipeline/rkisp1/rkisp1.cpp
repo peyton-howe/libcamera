@@ -500,10 +500,10 @@ void RkISP1CameraData::paramsComputed(unsigned int frame, unsigned int bytesused
 		selfPath_->queueBuffer(info->selfPathBuffer);
 }
 
-void RkISP1CameraData::setSensorControls([[maybe_unused]] unsigned int frame,
+void RkISP1CameraData::setSensorControls(unsigned int frame,
 					 const ControlList &sensorControls)
 {
-	delayedCtrls_->push(sensorControls);
+	delayedCtrls_->push(frame, sensorControls);
 }
 
 void RkISP1CameraData::metadataReady(unsigned int frame, const ControlList &metadata)

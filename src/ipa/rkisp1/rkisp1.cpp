@@ -343,6 +343,18 @@ void IPARkISP1::computeParams(const uint32_t frame, const uint32_t bufferId)
 {
 	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 
+	/*
+	 * \todo: This needs discussion. In raw mode, computeParams is
+	 * called without a params buffer, to trigger the setSensorControls
+	 * signal. Currently our algorithms don't support prepare calls with
+	 * a nullptr. Do we need that or can we safely skip it?
+	 */
+	if (bufferId == 0) {
+		ControlList ctrls = getSensorControls(frameContext);
+		setSensorControls.emit(frame, ctrls);
+		return;
+	}
+
 	RkISP1Params params(context_.configuration.paramFormat,
 			    mappedBuffers_.at(bufferId).planes()[0]);
 

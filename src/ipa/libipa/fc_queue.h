@@ -28,7 +28,7 @@ private:
 	bool initialised = false;
 };
 
-template<typename FrameContext>
+template<typename FC>
 class FCQueue
 {
 public:
@@ -39,15 +39,15 @@ public:
 
 	void clear()
 	{
-		for (FrameContext &ctx : contexts_) {
+		for (FC &ctx : contexts_) {
 			ctx.initialised = false;
 			ctx.frame = 0;
 		}
 	}
 
-	FrameContext &alloc(const uint32_t frame)
+	FC &alloc(const uint32_t frame)
 	{
-		FrameContext &frameContext = contexts_[frame % contexts_.size()];
+		FC &frameContext = contexts_[frame % contexts_.size()];
 
 		/*
 		 * Do not re-initialise if a get() call has already fetched this
@@ -69,9 +69,9 @@ public:
 		return frameContext;
 	}
 
-	FrameContext &get(uint32_t frame)
+	FC &get(uint32_t frame)
 	{
-		FrameContext &frameContext = contexts_[frame % contexts_.size()];
+		FC &frameContext = contexts_[frame % contexts_.size()];
 
 		/*
 		 * If the IPA algorithms try to access a frame context slot which
@@ -122,14 +122,14 @@ public:
 	}
 
 private:
-	void init(FrameContext &frameContext, const uint32_t frame)
+	void init(FC &frameContext, const uint32_t frame)
 	{
 		frameContext = {};
 		frameContext.frame = frame;
 		frameContext.initialised = true;
 	}
 
-	std::vector<FrameContext> contexts_;
+	std::vector<FC> contexts_;
 };
 
 } /* namespace ipa */

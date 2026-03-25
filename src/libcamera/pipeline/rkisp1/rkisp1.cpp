@@ -1525,7 +1525,8 @@ void PipelineHandlerRkISP1::frameStart(uint32_t sequence)
 		return;
 
 	RkISP1CameraData *data = cameraData(activeCamera_);
-	data->delayedCtrls_->applyControls(sequence);
+	uint32_t sequenceToApply = sequence + data->delayedCtrls_->maxDelay();
+	data->delayedCtrls_->applyControls(sequenceToApply);
 }
 
 bool PipelineHandlerRkISP1::match(DeviceEnumerator *enumerator)

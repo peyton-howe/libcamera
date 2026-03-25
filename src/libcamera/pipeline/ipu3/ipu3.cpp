@@ -1384,7 +1384,7 @@ void IPU3CameraData::statBufferReady(FrameBuffer *buffer)
  */
 void IPU3CameraData::frameStart(uint32_t sequence)
 {
-	delayedCtrls_->applyControls(sequence);
+	delayedCtrls_->applyControls(sequence + delayedCtrls_->maxDelay());
 
 	if (processingRequests_.empty())
 		return;

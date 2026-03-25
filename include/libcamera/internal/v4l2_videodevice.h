@@ -286,7 +286,6 @@ private:
 	std::unique_ptr<EventNotifier> fdBufferNotifier_;
 
 	State state_;
-	std::optional<unsigned int> firstFrame_;
 
 	Timer watchdog_;
 	utils::Duration watchdogDuration_;

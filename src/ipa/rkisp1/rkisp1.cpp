@@ -304,6 +304,9 @@ int IPARkISP1::configure(const IPAConfigInfo &ipaConfig,
 void IPARkISP1::mapBuffers(const std::vector<IPABuffer> &buffers)
 {
 	for (const IPABuffer &buffer : buffers) {
+		/* A buffer id of 0 is considered invalid */
+		ASSERT(buffer.id != 0);
+
 		auto elem = buffers_.emplace(std::piecewise_construct,
 					     std::forward_as_tuple(buffer.id),
 					     std::forward_as_tuple(buffer.planes));
@@ -389,7 +392,7 @@ void IPARkISP1::processStats(const uint32_t frame, const uint32_t bufferId,
 	 * provided.
 	 */
 	const rkisp1_stat_buffer *stats = nullptr;
-	if (!context_.configuration.raw)
+	if (bufferId != 0)
 		stats = reinterpret_cast<rkisp1_stat_buffer *>(
 			mappedBuffers_.at(bufferId).planes()[0].data());
 

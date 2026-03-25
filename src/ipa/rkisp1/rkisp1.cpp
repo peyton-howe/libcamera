@@ -67,6 +67,9 @@ public:
 
 	void queueRequest(const uint32_t frame, const ControlList &controls) override;
 	void computeParams(const uint32_t frame, const uint32_t bufferId) override;
+	void initializeFrameContext(const uint32_t frame,
+				    IPAFrameContext &frameContext,
+				    const ControlList &controls);
 	void processStats(const uint32_t frame, const uint32_t bufferId,
 			  const ControlList &sensorControls) override;
 
@@ -331,6 +334,13 @@ void IPARkISP1::queueRequest(const uint32_t frame, const ControlList &controls)
 	IPAFrameContext &frameContext = context_.frameContexts.alloc(frame);
 	context_.debugMetadata.enableByControl(controls);
 
+	initializeFrameContext(frame, frameContext, controls);
+}
+
+void IPARkISP1::initializeFrameContext(const uint32_t frame,
+				       IPAFrameContext &frameContext,
+				       const ControlList &controls)
+{
 	for (const auto &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
 		if (algo->disabled_)

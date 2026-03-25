@@ -34,7 +34,7 @@ namespace ipa {
  * update any specific action for this frame, and finally to update the metadata
  * control lists when the frame is fully completed.
  *
- * \var FrameContext::frame
+ * \var FrameContext::frame_
  * \brief The frame number
  */
 

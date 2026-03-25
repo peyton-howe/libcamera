@@ -24,8 +24,8 @@ class FCQueue;
 struct FrameContext {
 private:
 	template<typename T> friend class FCQueue;
-	uint32_t frame;
-	bool initialised = false;
+	uint32_t frame_;
+	bool initialised_ = false;
 };
 
 template<typename FC>
@@ -40,14 +40,15 @@ public:
 	void clear()
 	{
 		for (FC &ctx : contexts_) {
-			ctx.initialised = false;
-			ctx.frame = 0;
+			ctx.initialised_ = false;
+			ctx.frame_ = 0;
 		}
 	}
 
 	FC &alloc(const uint32_t frame)
 	{
-		FC &frameContext = contexts_[frame % contexts_.size()];
+		FC &fc = contexts_[frame % contexts_.size()];
+		FrameContext &frameContext = fc;
 
 		/*
 		 * Do not re-initialise if a get() call has already fetched this
@@ -60,18 +61,19 @@ public:
 		 * time the application has queued a request. Does this deserve
 		 * an error condition ?
 		 */
-		if (frame != 0 && frame <= frameContext.frame)
+		if (frame != 0 && frame <= frameContext.frame_)
 			LOG(FCQueue, Warning)
 				<< "Frame " << frame << " already initialised";
 		else
-			init(frameContext, frame);
+			init(fc, frame);
 
-		return frameContext;
+		return fc;
 	}
 
 	FC &get(uint32_t frame)
 	{
-		FC &frameContext = contexts_[frame % contexts_.size()];
+		FC &fc = contexts_[frame % contexts_.size()];
+		FrameContext &frameContext = fc;
 
 		/*
 		 * If the IPA algorithms try to access a frame context slot which
@@ -81,28 +83,28 @@ public:
 		 * queueing more requests to the IPA than the frame context
 		 * queue size.
 		 */
-		if (frame < frameContext.frame)
+		if (frame < frameContext.frame_)
 			LOG(FCQueue, Fatal) << "Frame context for " << frame
 					    << " has been overwritten by "
-					    << frameContext.frame;
+					    << frameContext.frame_;
 
-		if (frame == 0 && !frameContext.initialised) {
+		if (frame == 0 && !frameContext.initialised_) {
 			/*
 			 * If the IPA calls get() at start() time it will get an
 			 * un-intialized FrameContext as the below "frame ==
-			 * frameContext.frame" check will return success because
-			 * FrameContexts are zeroed at creation time.
+			 * frameContext.frame_" check will return success
+			 * because FrameContexts are zeroed at creation time.
 			 *
 			 * Make sure the FrameContext gets initialised if get()
 			 * is called before alloc() by the IPA for frame#0.
 			 */
-			init(frameContext, frame);
+			init(fc, frame);
 
-			return frameContext;
+			return fc;
 		}
 
-		if (frame == frameContext.frame)
-			return frameContext;
+		if (frame == frameContext.frame_)
+			return fc;
 
 		/*
 		 * The frame context has been retrieved before it was
@@ -116,17 +118,18 @@ public:
 		LOG(FCQueue, Warning)
 			<< "Obtained an uninitialised FrameContext for " << frame;
 
-		init(frameContext, frame);
+		init(fc, frame);
 
-		return frameContext;
+		return fc;
 	}
 
 private:
-	void init(FC &frameContext, const uint32_t frame)
+	void init(FC &fc, const uint32_t frame)
 	{
-		frameContext = {};
-		frameContext.frame = frame;
-		frameContext.initialised = true;
+		fc = {};
+		FrameContext &frameContext = fc;
+		frameContext.frame_ = frame;
+		frameContext.initialised_ = true;
 	}
 
 	std::vector<FC> contexts_;

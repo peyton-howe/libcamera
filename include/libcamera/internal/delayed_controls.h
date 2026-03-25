@@ -32,6 +32,7 @@ public:
 	void reset();
 
 	bool push(const ControlList &controls);
+	bool push(uint32_t sequence, const ControlList &controls);
 	ControlList get(uint32_t sequence);
 
 	void applyControls(uint32_t sequence);

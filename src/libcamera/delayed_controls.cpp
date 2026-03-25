@@ -144,10 +144,40 @@ void DelayedControls::reset()
  * Push a set of controls to the control queue. This increases the control queue
  * depth by one.
  *
+ * \note The usage of this function is discouraged as it does not provide a way
+ * to detect double pushes for the same sequence. Better use
+ * DelayedControls::push(uint32_t sequence, const ControlList &controls)
+ * instead.
+ *
  * \returns true if \a controls are accepted, or false otherwise
  */
 bool DelayedControls::push(const ControlList &controls)
 {
+	LOG(DelayedControls, Debug) << "Deprecated: Push without sequence number";
+	return push(queueCount_, controls);
+}
+
+/**
+ * \brief Push a set of controls on the queue
+ * \param[in] sequence The sequence number to push for
+ * \param[in] controls List of controls to add to the device queue
+ *
+ * Push a set of controls to the control queue. This increases the control queue
+ * depth by one.
+ *
+ * The \a sequence number is used to do some sanity checks to detect double
+ * pushes for the same sequence (either due to a bug or a request underrun).
+ *
+ * \returns true if \a controls are accepted, or false otherwise
+ */
+bool DelayedControls::push(uint32_t sequence, const ControlList &controls)
+{
+	if (sequence < queueCount_) {
+		LOG(DelayedControls, Warning)
+			<< "Double push for sequence " << sequence
+			<< " current queue index: " << queueCount_;
+	}
+
 	/* Copy state from previous frame. */
 	for (auto &ctrl : values_) {
 		Info &info = ctrl.second[queueCount_];
@@ -276,7 +306,7 @@ void DelayedControls::applyControls(uint32_t sequence)
 	while (writeCount_ > queueCount_) {
 		LOG(DelayedControls, Debug)
 			<< "Queue is empty, auto queue no-op.";
-		push({});
+		push(queueCount_, {});
 	}
 
 	device_->setControls(&out);

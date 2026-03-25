@@ -18,6 +18,7 @@ libcamera_public_sources = files([
 
 libcamera_internal_sources = files([
     'bayer_format.cpp',
+    'buffer_queue.cpp',
     'byte_stream_buffer.cpp',
     'camera_controls.cpp',
     'camera_lens.cpp',

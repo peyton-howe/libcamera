@@ -1472,8 +1472,6 @@ int PipelineHandlerRkISP1::createCamera(MediaEntity *sensor)
 	data->delayedCtrls_ =
 		std::make_unique<DelayedControls>(data->sensor_->device(),
 						  params);
-	isp_->frameStart.connect(data->delayedCtrls_.get(),
-				 &DelayedControls::applyControls);
 
 	uint32_t supportedBlocks = kDefaultExtParamsBlocks;
 
@@ -1506,6 +1504,15 @@ int PipelineHandlerRkISP1::createCamera(MediaEntity *sensor)
 	registerCamera(std::move(camera));
 
 	return 0;
+}
+
+void PipelineHandlerRkISP1::frameStart(uint32_t sequence)
+{
+	if (!activeCamera_)
+		return;
+
+	RkISP1CameraData *data = cameraData(activeCamera_);
+	data->delayedCtrls_->applyControls(sequence);
 }
 
 bool PipelineHandlerRkISP1::match(DeviceEnumerator *enumerator)
@@ -1550,6 +1557,7 @@ bool PipelineHandlerRkISP1::match(DeviceEnumerator *enumerator)
 	if (hasSelfPath_ && !selfPath_.init(media_))
 		return false;
 
+	isp_->frameStart.connect(this, &PipelineHandlerRkISP1::frameStart);
 	mainPath_.bufferReady().connect(this, &PipelineHandlerRkISP1::imageBufferReady);
 	if (hasSelfPath_)
 		selfPath_.bufferReady().connect(this, &PipelineHandlerRkISP1::imageBufferReady);

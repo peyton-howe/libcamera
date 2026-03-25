@@ -1352,6 +1352,12 @@ int PipelineHandlerRkISP1::queueRequestDevice(Camera *camera, Request *request)
 
 		if (data->selfPath_ && info->selfPathBuffer)
 			data->selfPath_->queueBuffer(info->selfPathBuffer);
+
+		/*
+		 * Call computeParams with an empty param buffer to trigger the
+		 * setSensorControls signal.
+		 */
+		data->ipa_->computeParams(data->frame_, 0);
 	} else {
 		data->ipa_->computeParams(data->frame_,
 					  info->paramBuffer->cookie());

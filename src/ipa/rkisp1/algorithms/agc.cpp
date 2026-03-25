@@ -209,7 +209,7 @@ void Agc::queueRequest(IPAContext &context,
 void Agc::prepare(IPAContext &context, const uint32_t frame,
 		  IPAFrameContext &frameContext, RkISP1Params *params)
 {
-	agc_.prepare(context.activeState.agc, frameContext.agc);
+	agc_.prepare(context.configuration.agc, context.activeState.agc, frameContext.agc);
 
 	if (context.configuration.compress.supported) {
 		frameContext.compress.enable = true;

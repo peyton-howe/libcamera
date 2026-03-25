@@ -64,8 +64,7 @@ public:
 
 	void queueRequest(const uint32_t frame, const ControlList &controls) override;
 	void computeParams(const uint32_t frame, const uint32_t bufferId) override;
-	void initializeFrameContext(const uint32_t frame,
-				    IPAFrameContext &frameContext,
+	void initializeFrameContext(IPAFrameContext &frameContext,
 				    const ControlList &controls);
 	void processStats(const uint32_t frame, const uint32_t bufferId,
 			  const ControlList &sensorControls) override;
@@ -124,6 +123,10 @@ const ControlInfoMap::Map rkisp1Controls{
 IPARkISP1::IPARkISP1()
 	: context_(kMaxFrameContexts)
 {
+	context_.frameContexts.setInitCallback(
+		[this](IPAFrameContext &fc, const ControlList &c) {
+			this->initializeFrameContext(fc, c);
+		});
 }
 
 std::string IPARkISP1::logPrefix() const
@@ -208,8 +211,7 @@ int IPARkISP1::init(const IPASettings &settings, unsigned int hwRevision,
 
 void IPARkISP1::start(const ControlList &controls, StartResult *result)
 {
-	IPAFrameContext frameContext = {};
-	initializeFrameContext(0, frameContext, controls);
+	IPAFrameContext &frameContext = context_.frameContexts.getOrInitContext(0, controls);
 	result->controls = getSensorControls(frameContext);
 	result->code = 0;
 }
@@ -295,27 +297,23 @@ void IPARkISP1::unmapBuffers(const std::vector<unsigned int> &ids)
 
 void IPARkISP1::queueRequest(const uint32_t frame, const ControlList &controls)
 {
-	IPAFrameContext &frameContext = context_.frameContexts.alloc(frame);
 	context_.debugMetadata.enableByControl(controls);
-
-	initializeFrameContext(frame, frameContext, controls);
+	context_.frameContexts.getOrInitContext(frame, controls);
 }
 
-void IPARkISP1::initializeFrameContext(const uint32_t frame,
-				       IPAFrameContext &frameContext,
-				       const ControlList &controls)
+void IPARkISP1::initializeFrameContext(IPAFrameContext &fc, const ControlList &controls)
 {
 	for (const auto &a : algorithms()) {
 		Algorithm *algo = static_cast<Algorithm *>(a.get());
 		if (algo->disabled_)
 			continue;
-		algo->queueRequest(context_, frame, frameContext, controls);
+		algo->queueRequest(context_, fc.frame(), fc, controls);
 	}
 }
 
 void IPARkISP1::computeParams(const uint32_t frame, const uint32_t bufferId)
 {
-	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
+	IPAFrameContext &frameContext = context_.frameContexts.getOrInitContext(frame);
 
 	/*
 	 * \todo: This needs discussion. In raw mode, computeParams is
@@ -344,7 +342,7 @@ void IPARkISP1::computeParams(const uint32_t frame, const uint32_t bufferId)
 void IPARkISP1::processStats(const uint32_t frame, const uint32_t bufferId,
 			     const ControlList &sensorControls)
 {
-	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
+	IPAFrameContext &frameContext = context_.frameContexts.getOrInitContext(frame);
 
 	/*
 	 * In raw capture mode, the ISP is bypassed and no statistics buffer is

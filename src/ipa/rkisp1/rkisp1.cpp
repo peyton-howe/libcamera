@@ -56,7 +56,7 @@ public:
 		 const IPACameraSensorInfo &sensorInfo,
 		 const ControlInfoMap &sensorControls,
 		 ControlInfoMap *ipaControls) override;
-	int start() override;
+	void start(const ControlList &controls, StartResult *result) override;
 	void stop() override;
 
 	int configure(const IPAConfigInfo &ipaConfig,
@@ -215,10 +215,12 @@ int IPARkISP1::init(const IPASettings &settings, unsigned int hwRevision,
 	return 0;
 }
 
-int IPARkISP1::start()
+void IPARkISP1::start(const ControlList &controls, StartResult *result)
 {
-	/* \todo Properly handle startup controls. */
-	return 0;
+	IPAFrameContext frameContext = {};
+	initializeFrameContext(0, frameContext, controls);
+	result->controls = getSensorControls(frameContext);
+	result->code = 0;
 }
 
 void IPARkISP1::stop()

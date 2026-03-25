@@ -14,13 +14,18 @@ struct IPAConfigInfo {
 	uint32 paramFormat;
 };
 
+struct StartResult {
+	libcamera.ControlList controls;
+	int32 code;
+};
+
 interface IPARkISP1Interface {
 	init(libcamera.IPASettings settings,
 	     uint32 hwRevision, uint32 supportedBlocks,
 	     libcamera.IPACameraSensorInfo sensorInfo,
 	     libcamera.ControlInfoMap sensorControls)
 		=> (int32 ret, libcamera.ControlInfoMap ipaControls);
-	start() => (int32 ret);
+	start(libcamera.ControlList controls) => (StartResult result);
 	stop();
 
 	configure(IPAConfigInfo configInfo,

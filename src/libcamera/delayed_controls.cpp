@@ -313,7 +313,7 @@ void DelayedControls::applyControls(uint32_t sequence)
 	writeCount_ = sequence + 1;
 
 	while (writeCount_ > queueCount_) {
-		LOG(DelayedControls, Debug)
+		LOG(DelayedControls, Warning)
 			<< "Queue is empty, auto queue no-op.";
 		push(queueCount_, {});
 	}

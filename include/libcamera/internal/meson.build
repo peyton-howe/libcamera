@@ -4,6 +4,7 @@ subdir('tracepoints')
 
 libcamera_internal_headers = files([
     'bayer_format.h',
+    'buffer_queue.h',
     'byte_stream_buffer.h',
     'camera.h',
     'camera_controls.h',

@@ -40,6 +40,7 @@ libcamera_internal_headers = files([
     'process.h',
     'pub_key.h',
     'request.h',
+    'sequence_sync_helper.h',
     'shared_mem_object.h',
     'source_paths.h',
     'sysfs.h',

@@ -49,6 +49,7 @@ libcamera_internal_sources = files([
     'pipeline_handler.cpp',
     'process.cpp',
     'pub_key.cpp',
+    'sequence_sync_helper.cpp',
     'shared_mem_object.cpp',
     'source_paths.cpp',
     'sysfs.cpp',

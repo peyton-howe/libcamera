@@ -111,7 +111,7 @@ void Agc::prepare(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 		  IPAFrameContext &frameContext,
 		  [[maybe_unused]] ipu3_uapi_params *params)
 {
-	agc_.prepare(context.activeState.agc, frameContext.agc);
+	agc_.prepare(context.configuration.agc, context.activeState.agc, frameContext.agc);
 }
 
 Histogram Agc::parseStatistics(const ipu3_uapi_stats_3a *stats,

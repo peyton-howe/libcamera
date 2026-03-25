@@ -74,7 +74,7 @@ void Agc::queueRequest(IPAContext &context, [[maybe_unused]] const uint32_t fram
 void Agc::prepare(IPAContext &context, [[maybe_unused]] const uint32_t frame,
 		  IPAFrameContext &frameContext, [[maybe_unused]] DebayerParams *params)
 {
-	agc_.prepare(context.activeState.agc, frameContext.agc);
+	agc_.prepare(context.configuration.agc, context.activeState.agc, frameContext.agc);
 }
 
 void Agc::process(IPAContext &context,

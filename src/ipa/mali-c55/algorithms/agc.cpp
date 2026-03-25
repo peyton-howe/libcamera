@@ -207,7 +207,7 @@ void Agc::fillWeightsArrayBuffer(MaliC55Params *params, const enum MaliC55Blocks
 void Agc::prepare(IPAContext &context, const uint32_t frame,
 		  IPAFrameContext &frameContext, MaliC55Params *params)
 {
-	agc_.prepare(context.activeState.agc, frameContext.agc);
+	agc_.prepare(context.configuration.agc, context.activeState.agc, frameContext.agc);
 
 	if (frame > 0)
 		return;

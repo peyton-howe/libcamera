@@ -178,6 +178,15 @@ bool DelayedControls::push(uint32_t sequence, const ControlList &controls)
 			<< " current queue index: " << queueCount_;
 	}
 
+	while (sequence > queueCount_) {
+		LOG(DelayedControls, Warning)
+			<< "Missed push for sequence " << queueCount_
+			<< " Auto queue no-op.";
+		push(queueCount_, {});
+	}
+
+	ASSERT(sequence == queueCount_);
+
 	/* Copy state from previous frame. */
 	for (auto &ctrl : values_) {
 		Info &info = ctrl.second[queueCount_];

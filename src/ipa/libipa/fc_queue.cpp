@@ -39,6 +39,12 @@ namespace ipa {
  */
 
 /**
+ * \fn FrameContext::frame()
+ * \brief Get the frame of that frame context
+ * \return THe frame number
+ */
+
+/**
  * \class FCQueue
  * \brief A support class for managing FrameContext instances in IPA modules
  * \tparam FrameContext The IPA module-specific FrameContext derived class type

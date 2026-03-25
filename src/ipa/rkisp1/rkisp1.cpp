@@ -72,7 +72,7 @@ protected:
 
 private:
 	void updateControls(ControlInfoMap *ipaControls);
-	void setControls(unsigned int frame);
+	ControlList getSensorControls(const IPAFrameContext &context);
 
 	std::map<unsigned int, FrameBuffer> buffers_;
 	std::map<unsigned int, MappedFrameBuffer> mappedBuffers_;
@@ -337,7 +337,12 @@ void IPARkISP1::processStats(const uint32_t frame, const uint32_t bufferId,
 		algo->process(context_, frame, frameContext, stats, metadata);
 	}
 
-	setControls(frame);
+	/*
+	 * \todo: Here we should do a lookahead that takes the sensor delays
+	 * into account.
+	 */
+	ControlList ctrls = getSensorControls(frameContext);
+	setSensorControls.emit(frame, ctrls);
 
 	context_.debugMetadata.moveEntries(metadata);
 	metadataReady.emit(frame, metadata);
@@ -351,27 +356,22 @@ void IPARkISP1::updateControls(ControlInfoMap *ipaControls)
 	*ipaControls = ControlInfoMap(std::move(ctrlMap), controls::controls);
 }
 
-void IPARkISP1::setControls(unsigned int frame)
+ControlList IPARkISP1::getSensorControls(const IPAFrameContext &frameContext)
 {
-	/*
-	 * \todo The frame number is most likely wrong here, we need to take
-	 * internal sensor delays and other timing parameters into account.
-	 */
-
-	IPAFrameContext &frameContext = context_.frameContexts.get(frame);
 	uint32_t exposure = frameContext.agc.exposure;
 	uint32_t vblank = frameContext.agc.vblank;
 
 	LOG(IPARkISP1, Debug)
-		<< "Set controls for frame " << frame << ": exposure " << exposure
-		<< ", gain " << frameContext.agc.gain << ", vblank " << vblank;
+		<< "Set controls for frame " << frameContext.frame()
+		<< ": exposure " << exposure
+		<< ", gain " << frameContext.agc.gain
+		<< ", vblank " << vblank;
 
 	ControlList ctrls(context_.sensorControls);
 	agc::prepareControls(ctrls, context_.camHelper.get(),
 			     exposure, frameContext.agc.gain);
 	ctrls.set(V4L2_CID_VBLANK, static_cast<int32_t>(vblank));
-
-	setSensorControls.emit(frame, ctrls);
+	return ctrls;
 }
 
 } /* namespace ipa::rkisp1 */

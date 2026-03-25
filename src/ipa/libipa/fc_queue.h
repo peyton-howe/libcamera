@@ -22,6 +22,8 @@ template<typename FrameContext>
 class FCQueue;
 
 struct FrameContext {
+	uint32_t frame() const { return frame_; }
+
 private:
 	template<typename T> friend class FCQueue;
 	uint32_t frame_;

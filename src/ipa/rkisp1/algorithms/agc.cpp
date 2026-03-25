@@ -284,9 +284,13 @@ void Agc::queueRequest(IPAContext &context,
 	frameContext.agc.autoExposureEnabled = agc.autoExposureEnabled;
 	frameContext.agc.autoGainEnabled = agc.autoGainEnabled;
 
-	if (!frameContext.agc.autoExposureEnabled)
+	if (frameContext.agc.autoExposureEnabled)
+		frameContext.agc.exposure = context.activeState.agc.automatic.exposure;
+	else
 		frameContext.agc.exposure = agc.manual.exposure;
-	if (!frameContext.agc.autoGainEnabled)
+	if (frameContext.agc.autoGainEnabled)
+		frameContext.agc.gain = context.activeState.agc.automatic.gain;
+	else
 		frameContext.agc.gain = agc.manual.gain;
 
 	if (!frameContext.agc.autoExposureEnabled &&

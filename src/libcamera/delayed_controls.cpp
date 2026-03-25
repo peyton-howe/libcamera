@@ -259,6 +259,13 @@ ControlList DelayedControls::get(uint32_t sequence)
 }
 
 /**
+ * \fn DelayedControls::maxDelay()
+ * \brief Get the maximum delay of the sensor
+ *
+ * \return The maximum delay of the sensor
+ */
+
+/**
  * \brief Inform DelayedControls of the start of a new frame
  * \param[in] sequence Sequence number of the frame that started
  *

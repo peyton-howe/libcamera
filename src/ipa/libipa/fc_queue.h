@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <libcamera/base/log.h>
+#include <libcamera/controls.h>
 
 namespace libcamera {
 
@@ -27,52 +28,33 @@ struct FrameContext {
 private:
 	template<typename T> friend class FCQueue;
 	uint32_t frame_;
-	bool initialised_ = false;
 };
 
 template<typename FC>
 class FCQueue
 {
 public:
+	using InitCallback = std::function<void(FC &, const ControlList &)>;
+
 	FCQueue(unsigned int size)
 		: contexts_(size)
 	{
 	}
 
+	void setInitCallback(const InitCallback &cb)
+	{
+		initCallback_ = cb;
+	}
+
 	void clear()
 	{
 		for (FC &ctx : contexts_) {
-			ctx.initialised_ = false;
 			ctx.frame_ = 0;
 		}
+		initialized_ = false;
 	}
 
-	FC &alloc(const uint32_t frame)
-	{
-		FC &fc = contexts_[frame % contexts_.size()];
-		FrameContext &frameContext = fc;
-
-		/*
-		 * Do not re-initialise if a get() call has already fetched this
-		 * frame context to preseve the context.
-		 *
-		 * \todo If the the sequence number of the context to initialise
-		 * is smaller than the sequence number of the queue slot to use,
-		 * it means that we had a serious request underrun and more
-		 * frames than the queue size has been produced since the last
-		 * time the application has queued a request. Does this deserve
-		 * an error condition ?
-		 */
-		if (frame != 0 && frame <= frameContext.frame_)
-			LOG(FCQueue, Warning)
-				<< "Frame " << frame << " already initialised";
-		else
-			init(fc, frame);
-
-		return fc;
-	}
-
-	FC &get(uint32_t frame)
+	FC &getOrInitContext(unsigned int frame, const ControlList &controls = {})
 	{
 		FC &fc = contexts_[frame % contexts_.size()];
 		FrameContext &frameContext = fc;
@@ -90,51 +72,42 @@ public:
 					    << " has been overwritten by "
 					    << frameContext.frame_;
 
-		if (frame == 0 && !frameContext.initialised_) {
-			/*
-			 * If the IPA calls get() at start() time it will get an
-			 * un-intialized FrameContext as the below "frame ==
-			 * frameContext.frame_" check will return success
-			 * because FrameContexts are zeroed at creation time.
-			 *
-			 * Make sure the FrameContext gets initialised if get()
-			 * is called before alloc() by the IPA for frame#0.
-			 */
-			init(fc, frame);
-
+		if (initialized_ && frame == frameContext.frame_) {
+			if (!controls.empty()) {
+				/* Too late to apply the controls. Store them for later. */
+				LOG(FCQueue, Warning)
+					<< "Request underrun. Controls for frame "
+					<< frame << " are delayed ";
+				controlsToApply_.merge(controls,
+						       ControlList::MergePolicy::OverwriteExisting);
+			}
+			LOG(FCQueue, Debug) << "Got " << frame;
 			return fc;
 		}
 
-		if (frame == frameContext.frame_)
-			return fc;
+		const ControlList *controls2 = &controls;
+		if (!controlsToApply_.empty()) {
+			LOG(FCQueue, Debug) << "Applied late controls on frame" << frame;
+			controlsToApply_.merge(controls, ControlList::MergePolicy::OverwriteExisting);
+			controls2 = &controlsToApply_;
+		}
 
-		/*
-		 * The frame context has been retrieved before it was
-		 * initialised through the initialise() call. This indicates an
-		 * algorithm attempted to access a Frame context before it was
-		 * queued to the IPA. Controls applied for this request may be
-		 * left unhandled.
-		 *
-		 * \todo Set an error flag for per-frame control errors.
-		 */
-		LOG(FCQueue, Warning)
-			<< "Obtained an uninitialised FrameContext for " << frame;
+		LOG(FCQueue, Debug) << "Init " << frame;
 
-		init(fc, frame);
+		fc = {};
+		frameContext.frame_ = frame;
+		initCallback_(fc, *controls2);
+		initialized_ = true;
+		controlsToApply_.clear();
 
 		return fc;
 	}
 
 private:
-	void init(FC &fc, const uint32_t frame)
-	{
-		fc = {};
-		FrameContext &frameContext = fc;
-		frameContext.frame_ = frame;
-		frameContext.initialised_ = true;
-	}
-
 	std::vector<FC> contexts_;
+	InitCallback initCallback_;
+	ControlList controlsToApply_;
+	bool initialized_;
 };
 
 } /* namespace ipa */

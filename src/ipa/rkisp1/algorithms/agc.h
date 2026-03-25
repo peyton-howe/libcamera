@@ -51,8 +51,7 @@ private:
 			  ControlList &metadata);
 	double estimateLuminance(double gain) const override;
 	void processFrameDuration(IPAContext &context,
-				  IPAFrameContext &frameContext,
-				  utils::Duration frameDuration);
+				  IPAFrameContext &frameContext);
 
 	Span<const uint8_t> expMeans_;
 	Span<const uint8_t> weights_;

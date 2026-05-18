@@ -2,6 +2,7 @@
 
 conf_files = files([
     'imx219.yaml',
+    'imx708.yaml',
     'uncalibrated.yaml',
 ])
 

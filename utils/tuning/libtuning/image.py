@@ -70,12 +70,27 @@ class Image:
         white = metadata[f'Exif.{subimage}.WhiteLevel'].value
         self.sigbits = int(white).bit_length()
         self.fmt = (self.sigbits - 4) // 2
-        self.exposure = int(metadata[f'Exif.{photo}.ExposureTime'].value * 1000000)
-        self.againQ8 = metadata[f'Exif.{photo}.ISOSpeedRatings'].value * 256 / 100
-        self.againQ8_norm = self.againQ8 / 256
+
+        self.exposure = None
+        exposure_key = f'Exif.{photo}.ExposureTime'
+        if exposure_key in metadata:
+            self.exposure = int(metadata[exposure_key].value * 1000000)
+
+        self.againQ8 = None
+        self.againQ8_norm = None
+        iso_key = f'Exif.{photo}.ISOSpeedRatings'
+        if iso_key in metadata:
+            self.againQ8 = metadata[iso_key].value * 256 / 100
+            self.againQ8_norm = self.againQ8 / 256
+
+        self.blacklevel = 0
+        self.blacklevel_16 = 0
+        bl_key = f'Exif.{subimage}.BlackLevel'
+        if bl_key in metadata:
+            self.blacklevel = int(metadata[bl_key].value[0])
+            self.blacklevel_16 = self.blacklevel << (16 - self.sigbits)
+
         self.camName = metadata['Exif.Image.Model'].value
-        self.blacklevel = int(metadata[f'Exif.{subimage}.BlackLevel'].value[0])
-        self.blacklevel_16 = self.blacklevel << (16 - self.sigbits)
 
         # Channel order depending on bayer pattern
         # The key is the order given by exif, where 0 is R, 1 is G, and 2 is B

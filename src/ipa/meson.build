@@ -28,6 +28,7 @@ supported_ipas = {
     'ipu3':       'ipu3',
     'mali-c55':   'mali-c55',
     'rkisp1':     'rkisp1',
+    'rkisp2':     'rkisp2',
     'rpi/pisp':   'rpi/pisp',
     'rpi/vc4':    'rpi/vc4',
     'simple':     'softisp',

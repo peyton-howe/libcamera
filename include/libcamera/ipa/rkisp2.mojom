@@ -1,0 +1,47 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
+/*
+ * \todo Document the interface and remove the related EXCLUDE_PATTERNS entry.
+ */
+
+module ipa.rkisp2;
+
+import "include/libcamera/ipa/core.mojom";
+
+/*
+ * colorSpaceEncoding comes from libcamera::ColorSpace::YcbcrEncoding; -1 for invalid
+ * colorSpaceRange comes from libcamera::ColorSpace::Range; -1 for invalid
+ */
+struct IPAConfigInfo {
+	libcamera.IPACameraSensorInfo sensorInfo;
+	libcamera.ControlInfoMap sensorControls;
+	int32 colorSpaceEncoding;
+	int32 colorSpaceRange;
+};
+
+interface IPARkISP2Interface {
+	init(libcamera.IPASettings settings,
+	     libcamera.IPACameraSensorInfo sensorInfo,
+	     libcamera.ControlInfoMap sensorControls)
+		=> (int32 ret, libcamera.ControlInfoMap ipaControls);
+	start() => (int32 ret);
+	stop();
+
+	configure(IPAConfigInfo configInfo)
+		=> (int32 ret, libcamera.ControlInfoMap ipaControls);
+
+	mapBuffers(array<libcamera.IPABuffer> buffers);
+	unmapBuffers(array<uint32> ids);
+
+	[async] queueRequest(uint32 frame, libcamera.ControlList reqControls);
+	[async] computeParams(uint32 frame, uint32 bufferId);
+	[async] processStats(uint32 frame, uint32 bufferId,
+			     libcamera.ControlList sensorControls);
+};
+
+interface IPARkISP2EventInterface {
+	paramsComputed(uint32 frame, uint32 bufferId, uint32 bytesused);
+	setSensorControls(uint32 frame, libcamera.ControlList sensorControls);
+	metadataReady(libcamera.ControlList metadata);
+};
+

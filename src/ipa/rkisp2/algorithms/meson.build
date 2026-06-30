@@ -6,5 +6,6 @@ rkisp2_ipa_algorithms = files([
     'bls.cpp',
     'ccm.cpp',
     'csm.cpp',
+    'goc.cpp',
 ])
 

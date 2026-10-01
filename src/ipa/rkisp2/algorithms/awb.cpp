@@ -178,7 +178,7 @@ RkISP2AwbStats Awb::calculateRgbMeans([[maybe_unused]] const IPAFrameContext &fr
 {
 	auto awb = stats->block<RkISP2StatsBlocks::Awb>();
 
-	if (!awb->done) {
+	if (!awb || !awb->done) {
 		LOG(RkISP2Awb, Error) << "No awb stats";
 		return {};
 	}

@@ -231,6 +231,13 @@ namespace {
  */
 static constexpr unsigned int kRkISP2MinBufferCount = 4;
 
+/*
+ * The number of frame contexts held by the IPA, which must match the size of
+ * its frame context queue. Statistics older than this many frames can no longer
+ * be matched with a frame context.
+ */
+static constexpr unsigned int kRkISP2IpaFrameContexts = 16;
+
 } /* namespace */
 
 class PipelineHandlerRkISP2 : public PipelineHandler
@@ -439,6 +446,20 @@ void RkISP2CameraData::statBufferReady(FrameBuffer *buffer)
 
 	if (buffer->metadata().status == FrameMetadata::FrameCancelled)
 		return;
+
+	/*
+	 * Statistics for a frame that is too old can't be processed, as the IPA
+	 * has already overwritten its frame context. This happens if the ISP
+	 * stalls and later releases old buffers. Recycle the buffer instead of
+	 * passing it to the IPA.
+	 */
+	if (sequence + kRkISP2IpaFrameContexts <= frame_) {
+		LOG(RkISP2, Warning)
+			<< "Dropping stale statistics for frame " << sequence
+			<< ", current frame is " << frame_;
+		stat_->queueBuffer(buffer);
+		return;
+	}
 
 	ipa_->processStats(sequence, buffer->cookie(),
 			   delayedCtrls_->get(sequence));

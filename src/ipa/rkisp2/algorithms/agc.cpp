@@ -213,6 +213,19 @@ void Agc::process(IPAContext &context, const uint32_t frame,
 	auto histBig = stats->block<RkISP2StatsBlocks::HistBig0>();
 
 	/*
+	 * The statistics buffer may not contain the blocks we asked for, for
+	 * example if the parameters enabling them have not been applied by the
+	 * ISP yet. Skip the statistics in that case.
+	 */
+	if (!aeLite || !histBig) {
+		LOG(RkISP2Agc, Debug)
+			<< "frame " << frame << ": AGC statistics are missing";
+		agc_.process(context.configuration.agc, context.activeState.agc,
+			     frameContext.agc, {}, metadata);
+		return;
+	}
+
+	/*
 	 * \todo Verify that the exposure and gain applied by the sensor for
 	 * this frame match what has been requested. This isn't a hard
 	 * requirement for stability of the AGC (the guarantee we need in

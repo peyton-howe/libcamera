@@ -238,6 +238,20 @@ static constexpr unsigned int kRkISP2MinBufferCount = 4;
  */
 static constexpr unsigned int kRkISP2IpaFrameContexts = 16;
 
+/*
+ * The minimum number of buffers a stream needs for the pipeline to run
+ * smoothly. This is also the default number of buffers, applications can
+ * request more.
+ */
+static constexpr unsigned int kRkISP2MinStreamBufferCount = 4;
+
+/*
+ * The number of requests in flight is bound by the number of stream buffers
+ * and must not exceed the number of frame contexts held by the IPA. Leave half
+ * of them for the frames that are in flight inside the pipeline.
+ */
+static constexpr unsigned int kRkISP2MaxStreamBufferCount = kRkISP2IpaFrameContexts / 2;
+
 } /* namespace */
 
 class PipelineHandlerRkISP2 : public PipelineHandler
@@ -593,6 +607,14 @@ CameraConfiguration::Status RkISP2CameraConfiguration::validate()
 
 	const Size &maxSize = usingIsp ? ispMaxSize : vicapMaxSize;
 
+	const unsigned int bufferCount =
+		std::clamp(cfg.bufferCount, kRkISP2MinStreamBufferCount,
+			   kRkISP2MaxStreamBufferCount);
+	if (cfg.bufferCount != bufferCount) {
+		cfg.bufferCount = bufferCount;
+		status = Adjusted;
+	}
+
 	if (!usingIsp) {
 		if (!rawFormats.count(cfg.pixelFormat)) {
 			cfg.pixelFormat = formats::SRGGB10;
@@ -652,8 +674,6 @@ CameraConfiguration::Status RkISP2CameraConfiguration::validate()
 	int ret = data_->mainPath_->tryFormat(&format);
 	if (ret)
 		return Invalid;
-
-	cfg.bufferCount = 4;
 
 	std::transform(rawFormats.begin(), rawFormats.end(),
 		       std::back_inserter(mbusCodes),
@@ -727,7 +747,7 @@ PipelineHandlerRkISP2::generateConfiguration(Camera *camera,
 	cfg.pixelFormat = isRaw ? rawFormat : formats::UYVY;
 	cfg.size = clampSensorSize(data, defaultMbusCode, maxSize);
 	cfg.colorSpace = isRaw ? ColorSpace::Raw : ColorSpace::Sycc;
-	cfg.bufferCount = 4;
+	cfg.bufferCount = kRkISP2MinStreamBufferCount;
 
 	config->addConfiguration(cfg);
 

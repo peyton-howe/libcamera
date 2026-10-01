@@ -99,11 +99,31 @@ struct RkISP2RequestInfo {
 	bool sequenceValid = false;
 };
 
+/*
+ * The set of devices that make up one camera: a sensor, the CSI receiver and
+ * VICAP path it is connected to, and optionally an ISP instance.
+ */
+struct RkISP2Resources {
+	std::shared_ptr<MediaDevice> media;
+	std::shared_ptr<MediaDevice> ispMedia;
+
+	std::unique_ptr<CameraSensor> sensor;
+	std::unique_ptr<V4L2Subdevice> csi;
+	std::unique_ptr<V4L2Subdevice> cif;
+	std::unique_ptr<V4L2VideoDevice> video;
+
+	std::unique_ptr<V4L2VideoDevice> rawrd;
+	std::unique_ptr<V4L2Subdevice> isp;
+	std::unique_ptr<V4L2VideoDevice> mainPath;
+	std::unique_ptr<V4L2VideoDevice> param;
+	std::unique_ptr<V4L2VideoDevice> stat;
+};
+
 class RkISP2CameraData : public Camera::Private
 {
 public:
-	RkISP2CameraData(PipelineHandler *pipe, MediaDevice *media)
-		: Camera::Private(pipe), media_(media), frame_(0)
+	RkISP2CameraData(PipelineHandler *pipe)
+		: Camera::Private(pipe), frame_(0)
 	{
 	}
 
@@ -111,10 +131,7 @@ public:
 	{
 	}
 
-	int init(bool usingIsp, CameraSensor *sensor, V4L2VideoDevice *video,
-		 V4L2VideoDevice *rawrd, V4L2Subdevice *isp,
-		 V4L2VideoDevice *mainPath, V4L2VideoDevice *param,
-		 V4L2VideoDevice *stat);
+	int init(bool usingIsp, RkISP2Resources &&resources);
 	PixelFormat getSensorFormat(unsigned int mbusCode, const Size &size,
 				    const Size &maxSize);
 
@@ -166,14 +183,17 @@ public:
 	bool usingIsp_;
 	bool isRaw_;
 
-	MediaDevice *media_;
-	CameraSensor *sensor_;
-	V4L2VideoDevice *video_;
-	V4L2VideoDevice *rawrd_;
-	V4L2Subdevice *isp_;
-	V4L2VideoDevice *mainPath_;
-	V4L2VideoDevice *param_;
-	V4L2VideoDevice *stat_;
+	std::shared_ptr<MediaDevice> media_;
+	std::shared_ptr<MediaDevice> ispMedia_;
+	std::unique_ptr<CameraSensor> sensor_;
+	std::unique_ptr<V4L2Subdevice> csi_;
+	std::unique_ptr<V4L2Subdevice> cif_;
+	std::unique_ptr<V4L2VideoDevice> video_;
+	std::unique_ptr<V4L2VideoDevice> rawrd_;
+	std::unique_ptr<V4L2Subdevice> isp_;
+	std::unique_ptr<V4L2VideoDevice> mainPath_;
+	std::unique_ptr<V4L2VideoDevice> param_;
+	std::unique_ptr<V4L2VideoDevice> stat_;
 	Stream stream_;
 
 	std::unique_ptr<ipa::rkisp2::IPAProxyRkISP2> ipa_;
@@ -240,7 +260,10 @@ private:
 	}
 
 	int updateControls(RkISP2CameraData *data);
-	bool createCamera(bool usingIsp);
+	bool createCamera(bool usingIsp, RkISP2Resources &&resources);
+	bool matchCamera(DeviceEnumerator *enumerator,
+			 const std::shared_ptr<MediaDevice> &cifMedia,
+			 MediaEntity *csiEntity, bool useIsp);
 	int processControls(RkISP2CameraData *data, const ControlList &ctrls);
 
 	int allocateBuffers(Camera *camera);
@@ -248,35 +271,22 @@ private:
 
 	Size clampSensorSize(RkISP2CameraData *data, unsigned int mbus,
 			     const Size &maxSize);
-
-	std::shared_ptr<MediaDevice> media_;
-	std::unique_ptr<CameraSensor> sensor_;
-	std::unique_ptr<V4L2Subdevice> csi_;
-	std::unique_ptr<V4L2Subdevice> cif_;
-	std::unique_ptr<V4L2VideoDevice> video_;
-
-	std::shared_ptr<MediaDevice> ispMedia_;
-	std::unique_ptr<V4L2VideoDevice> rawrd_;
-	std::unique_ptr<V4L2Subdevice> isp_;
-	std::unique_ptr<V4L2VideoDevice> mainPath_;
-	std::unique_ptr<V4L2VideoDevice> param_;
-	std::unique_ptr<V4L2VideoDevice> stat_;
 };
 
-int RkISP2CameraData::init(bool usingIsp, CameraSensor *sensor,
-			   V4L2VideoDevice *video, V4L2VideoDevice *rawrd,
-			   V4L2Subdevice *isp,
-			   V4L2VideoDevice *mainPath, V4L2VideoDevice *param,
-			   V4L2VideoDevice *stat)
+int RkISP2CameraData::init(bool usingIsp, RkISP2Resources &&resources)
 {
 	usingIsp_ = usingIsp;
-	sensor_ = sensor;
-	video_ = video;
-	rawrd_ = rawrd;
-	isp_ = isp;
-	mainPath_ = mainPath;
-	param_ = param;
-	stat_ = stat;
+	media_ = std::move(resources.media);
+	ispMedia_ = std::move(resources.ispMedia);
+	sensor_ = std::move(resources.sensor);
+	csi_ = std::move(resources.csi);
+	cif_ = std::move(resources.cif);
+	video_ = std::move(resources.video);
+	rawrd_ = std::move(resources.rawrd);
+	isp_ = std::move(resources.isp);
+	mainPath_ = std::move(resources.mainPath);
+	param_ = std::move(resources.param);
+	stat_ = std::move(resources.stat);
 
 	ControlInfoMap::Map ctrls;
 
@@ -517,7 +527,7 @@ RkISP2CameraConfiguration::RkISP2CameraConfiguration(const RkISP2CameraData *dat
 
 CameraConfiguration::Status RkISP2CameraConfiguration::validate()
 {
-	const CameraSensor *sensor = data_->sensor_;
+	const CameraSensor *sensor = data_->sensor_.get();
 	std::vector<unsigned int> mbusCodes;
 	Status status = Valid;
 
@@ -721,26 +731,26 @@ int PipelineHandlerRkISP2::configure(Camera *camera,
 	LOG(RkISP2, Debug) << "Configuring sensor with " << format;
 
 	if (config->sensorConfig)
-		ret = sensor_->applyConfiguration(*config->sensorConfig,
+		ret = data->sensor_->applyConfiguration(*config->sensorConfig,
 						  Transform::Identity, &format);
 	else
-		ret = sensor_->setFormat(&format);
+		ret = data->sensor_->setFormat(&format);
 	if (ret < 0)
 		return ret;
 
 	LOG(RkISP2, Debug) << "Sensor configured with " << format;
 
 	LOG(RkISP2, Debug) << "Configuring CSI with : " << format;
-	ret = csi_->setFormat(0, &format);
+	ret = data->csi_->setFormat(0, &format);
 	if (ret)
 		return ret;
 
 	LOG(RkISP2, Debug) << "Configuring VICAP with : " << format;
-	ret = cif_->setFormat(0, &format);
+	ret = data->cif_->setFormat(0, &format);
 	if (ret)
 		return ret;
 
-	ret = cif_->setFormat(1, &format);
+	ret = data->cif_->setFormat(1, &format);
 	if (ret)
 		return ret;
 
@@ -749,7 +759,7 @@ int PipelineHandlerRkISP2::configure(Camera *camera,
 		data->getSensorFormat(format.code, format.size, maxSize);
 
 	V4L2DeviceFormat vicapOutputFormat;
-	vicapOutputFormat.fourcc = video_->toV4L2PixelFormat(vicapPixelFormat);
+	vicapOutputFormat.fourcc = data->video_->toV4L2PixelFormat(vicapPixelFormat);
 	vicapOutputFormat.size = format.size;
 
 	LOG(RkISP2, Debug) << "Configuring VICAP capture node with : " << vicapOutputFormat;
@@ -768,28 +778,28 @@ int PipelineHandlerRkISP2::configure(Camera *camera,
 	 * or camera data
 	 */
 	LOG(RkISP2, Debug) << "Configuring rawrd0 with: " << vicapOutputFormat;
-	ret = rawrd_->setFormat(&vicapOutputFormat);
+	ret = data->rawrd_->setFormat(&vicapOutputFormat);
 	if (ret)
 		return ret;
 
 	LOG(RkISP2, Debug) << "Configuring ISP input with: " << format;
-	ret = isp_->setFormat(0, &format);
+	ret = data->isp_->setFormat(0, &format);
 	if (ret)
 		return ret;
 
 	format.code = formatToMediaBus.at(cfg.pixelFormat);
 	format.size = cfg.size;
 	LOG(RkISP2, Debug) << "Configuring ISP output with: " << format;
-	ret = isp_->setFormat(5, &format);
+	ret = data->isp_->setFormat(5, &format);
 	if (ret)
 		return ret;
 
 	V4L2DeviceFormat outputFormat;
-	outputFormat.fourcc = mainPath_->toV4L2PixelFormat(cfg.pixelFormat);
+	outputFormat.fourcc = data->mainPath_->toV4L2PixelFormat(cfg.pixelFormat);
 	outputFormat.size = cfg.size;
 
 	LOG(RkISP2, Debug) << "Configuring main path with: " << outputFormat;
-	ret = mainPath_->setFormat(&outputFormat);
+	ret = data->mainPath_->setFormat(&outputFormat);
 	if (ret)
 		return ret;
 
@@ -805,13 +815,13 @@ int PipelineHandlerRkISP2::configure(Camera *camera,
 
 	V4L2DeviceFormat paramFormat;
 	paramFormat.fourcc = V4L2PixelFormat(V4L2_META_FMT_RKISP2_PARAMS);
-	ret = param_->setFormat(&paramFormat);
+	ret = data->param_->setFormat(&paramFormat);
 	if (ret)
 		return ret;
 
 	V4L2DeviceFormat statFormat;
 	statFormat.fourcc = V4L2PixelFormat(V4L2_META_FMT_RKISP2_STATS);
-	ret = stat_->setFormat(&statFormat);
+	ret = data->stat_->setFormat(&statFormat);
 	if (ret)
 		return ret;
 
@@ -932,8 +942,8 @@ int PipelineHandlerRkISP2::start(Camera *camera,
 			}
 		};
 
-		queueBuffers(data->internalBuffers_, data->video_, "vicap");
-		queueBuffers(data->statBuffers_, data->stat_, "stat");
+		queueBuffers(data->internalBuffers_, data->video_.get(), "vicap");
+		queueBuffers(data->statBuffers_, data->stat_.get(), "stat");
 	}
 
 	ret = data->video_->streamOn();
@@ -1057,12 +1067,11 @@ int PipelineHandlerRkISP2::updateControls(RkISP2CameraData *data)
 	return 0;
 }
 
-bool PipelineHandlerRkISP2::createCamera(bool usingIsp)
+bool PipelineHandlerRkISP2::createCamera(bool usingIsp, RkISP2Resources &&resources)
 {
 	std::unique_ptr<RkISP2CameraData> data =
-		std::make_unique<RkISP2CameraData>(this, media_.get());
-	if (data->init(usingIsp, sensor_.get(), video_.get(), rawrd_.get(),
-		       isp_.get(), mainPath_.get(), param_.get(), stat_.get())) {
+		std::make_unique<RkISP2CameraData>(this);
+	if (data->init(usingIsp, std::move(resources))) {
 		LOG(RkISP2, Error) << "Failed to initialize data";
 		return false;
 	}
@@ -1081,7 +1090,7 @@ bool PipelineHandlerRkISP2::createCamera(bool usingIsp)
 		data->delayedCtrls_ =
 			std::make_unique<DelayedControls>(data->sensor_->device(),
 							  params);
-		isp_->frameStart.connect(data->delayedCtrls_.get(),
+		data->isp_->frameStart.connect(data->delayedCtrls_.get(),
 					 &DelayedControls::applyControls);
 
 		int ret = data->loadIPA();
@@ -1093,7 +1102,7 @@ bool PipelineHandlerRkISP2::createCamera(bool usingIsp)
 		updateControls(data.get());
 
 		data->paramQueue_ =
-			std::make_unique<BufferQueue>(std::make_unique<BufferQueueDelegate<V4L2VideoDevice>>(param_.get()),
+			std::make_unique<BufferQueue>(std::make_unique<BufferQueueDelegate<V4L2VideoDevice>>(data->param_.get()),
 						      BufferQueue::PrepareStage, "Params");
 	}
 
@@ -1113,62 +1122,99 @@ bool PipelineHandlerRkISP2::createCamera(bool usingIsp)
 bool PipelineHandlerRkISP2::match(DeviceEnumerator *enumerator)
 {
 	DeviceMatch dm("rockchip-cif");
-	/* \todo Generalize this for the other csi ports */
-	/*
-	 * I think we will have one camera per csi port, and then 4 streams
-	 * each that correspond to the 4 channels. Not sure how to handle
-	 * routing to the ISP though. For now we'll just assume one camera.
-	 */
-	dm.add("rkcif-mipi2");
-	/* \todo Generalize this for the other channels */
-	dm.add("rkcif-mipi2-id0");
-	dm.add("dw-mipi-csi2rx fdd30000.csi");
-
-	media_ = acquireMediaDevice(enumerator, dm);
-	if (!media_)
+	std::shared_ptr<MediaDevice> cifMedia = acquireMediaDevice(enumerator, dm);
+	if (!cifMedia)
 		return false;
 
-	csi_ = V4L2Subdevice::fromEntityName(media_.get(), "dw-mipi-csi2rx fdd30000.csi");
-	if (!csi_ || csi_->open() < 0) {
+	const GlobalConfiguration &configuration = cameraManager()->_d()->configuration();
+	bool useIsp = configuration.configuration()["pipelines"]["rkisp2"]["isp_enable"].get<bool>(true);
+	if (!useIsp)
+		LOG(RkISP2, Info) << "ISP disabled in configuration file";
+
+	/*
+	 * There is one camera per CSI receiver that has a sensor connected to
+	 * it. All the receivers are part of the same rockchip-cif media device,
+	 * while each ISP instance is a separate rkisp2 media device.
+	 */
+	bool created = false;
+	for (MediaEntity *entity : cifMedia->entities()) {
+		if (entity->name().rfind("dw-mipi-csi2rx", 0) != 0)
+			continue;
+
+		if (matchCamera(enumerator, cifMedia, entity, useIsp))
+			created = true;
+	}
+
+	return created;
+}
+
+bool PipelineHandlerRkISP2::matchCamera(DeviceEnumerator *enumerator,
+					const std::shared_ptr<MediaDevice> &cifMedia,
+					MediaEntity *csiEntity, bool useIsp)
+{
+	RkISP2Resources res;
+	res.media = cifMedia;
+
+	/* Find the sensor connected to the CSI receiver sink pad. */
+	MediaEntity *sensorEntity = nullptr;
+	MediaEntity *cifEntity = nullptr;
+	for (const MediaPad *pad : csiEntity->pads()) {
+		for (const MediaLink *link : pad->links()) {
+			if (link->sink()->entity() == csiEntity) {
+				MediaEntity *source = link->source()->entity();
+				if (source->function() == MEDIA_ENT_F_CAM_SENSOR && !sensorEntity)
+					sensorEntity = source;
+			} else if (!cifEntity) {
+				/* Follow the CSI receiver source pad to the VICAP. */
+				cifEntity = link->sink()->entity();
+			}
+		}
+	}
+
+	if (!sensorEntity || !cifEntity) {
+		LOG(RkISP2, Debug)
+			<< "No sensor connected to " << csiEntity->name();
+		return false;
+	}
+
+	LOG(RkISP2, Debug)
+		<< "Identified " << sensorEntity->name() << " on "
+		<< csiEntity->name() << " via " << cifEntity->name();
+
+	res.csi = std::make_unique<V4L2Subdevice>(csiEntity);
+	if (res.csi->open() < 0) {
 		LOG(RkISP2, Error) << "Failed to open csi";
 		return false;
 	}
 
-	cif_ = V4L2Subdevice::fromEntityName(media_.get(), "rkcif-mipi2");
-	if (!cif_ || cif_->open() < 0) {
+	res.cif = std::make_unique<V4L2Subdevice>(cifEntity);
+	if (res.cif->open() < 0) {
 		LOG(RkISP2, Error) << "Failed to open cif";
 		return false;
 	}
 
 	/* \todo Support multiple streams */
-	video_ = V4L2VideoDevice::fromEntityName(media_.get(), "rkcif-mipi2-id0");
-	if (!video_ || video_->open() < 0) {
+	res.video = V4L2VideoDevice::fromEntityName(cifMedia.get(),
+						    cifEntity->name() + "-id0");
+	if (!res.video || res.video->open() < 0) {
 		LOG(RkISP2, Error) << "Failed to open capture device";
 		return false;
 	}
 
-	for (MediaEntity *entity : media_->locateEntities(MEDIA_ENT_F_CAM_SENSOR)) {
-		LOG(RkISP2, Debug) << "Identified " << entity->name();
-		sensor_ = CameraSensorFactoryBase::create(entity);
-		/* Just get the first sensor for now */
-		if (sensor_)
-			break;
-	}
-
-	if (!sensor_) {
-		LOG(RkISP2, Error) << "Failed to find sensor";
+	res.sensor = CameraSensorFactoryBase::create(sensorEntity);
+	if (!res.sensor) {
+		LOG(RkISP2, Error) << "Failed to create sensor";
 		return false;
 	}
 
-	const GlobalConfiguration &configuration = cameraManager()->_d()->configuration();
-	bool usingIsp = configuration.configuration()["pipelines"]["rkisp2"]["isp_enable"].get<bool>(true);
-	if (!usingIsp) {
-		LOG(RkISP2, Info) << "ISP disabled in configuration file";
-		return createCamera(usingIsp);
-	}
+	if (!useIsp)
+		return createCamera(false, std::move(res));
 
-	/* Match ISP */
-
+	/*
+	 * Match an ISP. acquireMediaDevice() skips devices that are already
+	 * acquired, so each camera gets its own ISP instance. If there are
+	 * fewer ISPs than cameras the remaining cameras are raw-only.
+	 */
 	DeviceMatch dmIsp("rkisp2");
 	dmIsp.add("rkisp2_isp");
 	/* \todo Generalize this for the other channels */
@@ -1176,46 +1222,45 @@ bool PipelineHandlerRkISP2::match(DeviceEnumerator *enumerator)
 	/* \todo Support self path */
 	dmIsp.add("rkisp2_mainpath");
 
-	ispMedia_ = acquireMediaDevice(enumerator, dmIsp);
-	if (!ispMedia_) {
-		usingIsp = false;
+	res.ispMedia = acquireMediaDevice(enumerator, dmIsp);
+	if (!res.ispMedia) {
 		LOG(RkISP2, Debug) << "ISP not found";
-		return createCamera(usingIsp);
+		return createCamera(false, std::move(res));
 	}
 
 	/* \todo Support the other rawrd nodes */
-	rawrd_ = V4L2VideoDevice::fromEntityName(ispMedia_.get(), "rkisp2_rawrd0");
-	if (!rawrd_ || rawrd_->open() < 0) {
+	res.rawrd = V4L2VideoDevice::fromEntityName(res.ispMedia.get(), "rkisp2_rawrd0");
+	if (!res.rawrd || res.rawrd->open() < 0) {
 		LOG(RkISP2, Error) << "Failed to open rkisp2 rawrd device";
 		return false;
 	}
 
-	isp_ = V4L2Subdevice::fromEntityName(ispMedia_.get(), "rkisp2_isp");
-	if (!isp_ || isp_->open() < 0) {
+	res.isp = V4L2Subdevice::fromEntityName(res.ispMedia.get(), "rkisp2_isp");
+	if (!res.isp || res.isp->open() < 0) {
 		LOG(RkISP2, Error) << "Failed to open rkisp2 isp";
 		return false;
 	}
 
 	/* \todo Support self path */
-	mainPath_ = V4L2VideoDevice::fromEntityName(ispMedia_.get(), "rkisp2_mainpath");
-	if (!mainPath_ || mainPath_->open() < 0) {
+	res.mainPath = V4L2VideoDevice::fromEntityName(res.ispMedia.get(), "rkisp2_mainpath");
+	if (!res.mainPath || res.mainPath->open() < 0) {
 		LOG(RkISP2, Error) << "Failed to open rkisp2 main path";
 		return false;
 	}
 
-	param_ = V4L2VideoDevice::fromEntityName(ispMedia_.get(), "rkisp2_params");
-	if (!param_ || param_->open() < 0) {
+	res.param = V4L2VideoDevice::fromEntityName(res.ispMedia.get(), "rkisp2_params");
+	if (!res.param || res.param->open() < 0) {
 		LOG(RkISP2, Error) << "Failed to open rkisp2 params";
 		return false;
 	}
 
-	stat_ = V4L2VideoDevice::fromEntityName(ispMedia_.get(), "rkisp2_stats");
-	if (!stat_ || stat_->open() < 0) {
+	res.stat = V4L2VideoDevice::fromEntityName(res.ispMedia.get(), "rkisp2_stats");
+	if (!res.stat || res.stat->open() < 0) {
 		LOG(RkISP2, Error) << "Failed to open rkisp2 stats";
 		return false;
 	}
 
-	return createCamera(true);
+	return createCamera(true, std::move(res));
 }
 
 int PipelineHandlerRkISP2::processControls(RkISP2CameraData *data, const ControlList &ctrls)

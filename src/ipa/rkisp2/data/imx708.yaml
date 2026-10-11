@@ -20,7 +20,7 @@ algorithms:
             yTarget: 0.1
       relativeLuminanceTarget: 0.1
   - Awb:
-      algorithm: "grey"
+      algorithm: "bayes"
       AwbMode:
         AwbAuto:
           lo: 2500

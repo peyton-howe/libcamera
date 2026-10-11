@@ -226,8 +226,8 @@ private:
 namespace {
 
 /*
- * This many internal buffers (or rather parameter and statistics buffer
- * pairs) ensures that the pipeline runs smoothly, without frame drops.
+ * Statistics and raw buffers. Four is enough: statistics are requeued from
+ * the completion handler, and the raw buffers are the sensor-side queue.
  */
 static constexpr unsigned int kRkISP2MinBufferCount = 4;
 
@@ -237,6 +237,16 @@ static constexpr unsigned int kRkISP2MinBufferCount = 4;
  * be matched with a frame context.
  */
 static constexpr unsigned int kRkISP2IpaFrameContexts = 16;
+
+/*
+ * One parameter buffer is queued per request and stays with the driver until
+ * the ISP frame-start interrupt returns it. That return is only one frame
+ * time before the request completes, so at 120 fps the completion callback
+ * requeues before the returned buffer is idle again. A dropped-frame
+ * correction also asks for every skipped sequence in the same queueRequest.
+ * Cover the whole IPA frame-context depth.
+ */
+static constexpr unsigned int kRkISP2ParamBufferCount = kRkISP2IpaFrameContexts;
 
 /*
  * The minimum number of buffers a stream needs for the pipeline to run
@@ -1333,7 +1343,7 @@ int PipelineHandlerRkISP2::allocateBuffers(Camera *camera)
 
 	actions += [&]() { data->stat_->releaseBuffers(); };
 
-	ret = data->paramQueue_->allocateBuffers(kRkISP2MinBufferCount);
+	ret = data->paramQueue_->allocateBuffers(kRkISP2ParamBufferCount);
 	if (ret < 0)
 		return ret;
 

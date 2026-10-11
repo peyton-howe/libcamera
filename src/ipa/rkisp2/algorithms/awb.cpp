@@ -8,6 +8,7 @@
 #include "awb.h"
 
 #include <algorithm>
+#include <numeric>
 
 #include <libcamera/base/log.h>
 
@@ -59,17 +60,21 @@ public:
 
 	bool valid() const override
 	{
-		/* Minimum mean value below which AWB can't operate. */
+		/*
+		 * Minimum mean value below which AWB can't operate. Grey world
+		 * divides by red and blue, so every channel needs signal.
+		 */
 		constexpr double minValue = 0.2;
 
-		return rgbMeans_.r() > minValue || rgbMeans_.g() > minValue ||
+		return rgbMeans_.r() > minValue && rgbMeans_.g() > minValue &&
 		       rgbMeans_.b() > minValue;
 	}
 
 private:
-	RGB<double> rgbMeans_;
-	double rg_;
-	double bg_;
+	/* Zeroed so that stats returned when the ISP has none are invalid. */
+	RGB<double> rgbMeans_{ 0.0 };
+	double rg_ = 0.0;
+	double bg_ = 0.0;
 };
 
 namespace {
@@ -186,17 +191,28 @@ RkISP2AwbStats Awb::calculateRgbMeans([[maybe_unused]] const IPAFrameContext &fr
 	std::array<int32_t, RKISP2_ISP_AWB_COUNTS_SIZE> counts;
 	RGB<double> means;
 
+	/*
+	 * Sum in 64 bits and divide in floating point. The per-block values
+	 * are small, and integer division truncated the means to 0..7; a red
+	 * or blue mean of 0 then drove its gain to the 64x clamp.
+	 */
+	auto mean = [&]() {
+		return static_cast<double>(std::accumulate(counts.begin(), counts.end(),
+							   int64_t{ 0 })) /
+		       counts.size();
+	};
+
 	for (size_t i = 0; i < RKISP2_ISP_AWB_COUNTS_SIZE; i++)
 		counts[i] = static_cast<int32_t>(awb->counts_r[i]);
-	means.r() = std::accumulate(counts.begin(), counts.end(), 0) / counts.size();
+	means.r() = mean();
 
 	for (size_t i = 0; i < RKISP2_ISP_AWB_COUNTS_SIZE; i++)
 		counts[i] = static_cast<int32_t>(awb->counts_g[i]);
-	means.g() = std::accumulate(counts.begin(), counts.end(), 0) / counts.size();
+	means.g() = mean();
 
 	for (size_t i = 0; i < RKISP2_ISP_AWB_COUNTS_SIZE; i++)
 		counts[i] = static_cast<int32_t>(awb->counts_b[i]);
-	means.b() = std::accumulate(counts.begin(), counts.end(), 0) / counts.size();
+	means.b() = mean();
 
 	for (size_t i = 0; i < RKISP2_ISP_AWB_COUNTS_SIZE; i++)
 		counts[i] = static_cast<int32_t>(awb->counts_w[i]);

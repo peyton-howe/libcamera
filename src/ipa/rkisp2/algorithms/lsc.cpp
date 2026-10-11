@@ -114,7 +114,7 @@ int LensShadingCorrection::init(IPAContext &context,
 				.keys = { "r", "gr", "gb", "b" },
 				.numHSamples = RKISP2_ISP_LSC_SAMPLES_MAX,
 				.numVSamples = RKISP2_ISP_LSC_SAMPLES_MAX,
-				.sensorSize = context.sensorInfo.activeAreaSize
+				.sensorSize = context.sensorInfo.activeArea.size()
 			     });
 }
 

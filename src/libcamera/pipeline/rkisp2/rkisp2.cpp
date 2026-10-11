@@ -938,14 +938,26 @@ int PipelineHandlerRkISP2::start(Camera *camera,
 		}
 		actions += [&]() { freeBuffers(camera); };
 
-		/* \todo Support start controls */
-		ret = data->ipa_->start();
-		if (ret) {
+		ControlList ctrls;
+		if (controls)
+			ctrls = *controls;
+
+		ipa::rkisp2::StartResult res;
+		data->ipa_->start(ctrls, &res);
+		if (res.code) {
 			LOG(RkISP2, Error)
 				<< "Failed to start IPA " << camera->id();
-			return ret;
+			return res.code;
 		}
 		actions += [&]() { data->ipa_->stop(); };
+
+		/*
+		 * Apply the sensor controls computed from the start controls
+		 * before streaming, and reset the delayed controls so that
+		 * they start from the values now on the sensor.
+		 */
+		data->sensor_->setControls(&res.controls);
+		data->delayedCtrls_->reset();
 
 		ret = data->param_->streamOn();
 		if (ret) {

@@ -53,7 +53,7 @@ public:
 		 const IPACameraSensorInfo &sensorInfo,
 		 const ControlInfoMap &sensorControls,
 		 ControlInfoMap *ipaControls) override;
-	int start() override;
+	void start(const ControlList &controls, StartResult *result) override;
 	void stop() override;
 
 	int configure(const IPAConfigInfo &ipaConfig,
@@ -74,7 +74,7 @@ protected:
 private:
 	void updateControls(ControlInfoMap *ipaControls);
 
-	void setControls(unsigned int frame, const IPAFrameContext &frameContext);
+	ControlList getSensorControls(const IPAFrameContext &frameContext);
 
 	std::map<unsigned int, FrameBuffer> buffers_;
 	std::map<unsigned int, MappedFrameBuffer> mappedBuffers_;
@@ -159,10 +159,11 @@ int IPARkISP2::init(const IPASettings &settings,
 	return 0;
 }
 
-int IPARkISP2::start()
+void IPARkISP2::start(const ControlList &controls, StartResult *result)
 {
-	/* \todo Properly handle startup controls. */
-	return 0;
+	IPAFrameContext &frameContext = context_.frameContexts.getOrInitContext(0, controls);
+	result->controls = getSensorControls(frameContext);
+	result->code = 0;
 }
 
 void IPARkISP2::stop()
@@ -272,24 +273,25 @@ void IPARkISP2::processStats(const uint32_t frame, const uint32_t bufferId,
 	for (const auto &algo : algorithms())
 		algo->process(context_, frame, frameContext, &stats, metadata);
 
-	setControls(frame, frameContext);
-
-	metadataReady.emit(metadata);
-}
-
-void IPARkISP2::setControls(unsigned int frame, const IPAFrameContext &frameContext)
-{
 	/*
 	 * \todo The frame number is most likely wrong here, we need to take
 	 * internal sensor delays and other timing parameters into account.
 	 */
+	setSensorControls.emit(frame, getSensorControls(frameContext));
 
+	metadataReady.emit(metadata);
+}
+
+ControlList IPARkISP2::getSensorControls(const IPAFrameContext &frameContext)
+{
 	uint32_t exposure = frameContext.agc.exposure;
 	uint32_t vblank = frameContext.agc.vblank;
 
 	LOG(IPARkISP2, Debug)
-		<< "Set controls for frame " << frame << ": exposure " << exposure
-		<< ", gain " << frameContext.agc.gain << ", vblank " << vblank;
+		<< "Set controls for frame " << frameContext.frame()
+		<< ": exposure " << exposure
+		<< ", gain " << frameContext.agc.gain
+		<< ", vblank " << vblank;
 
 	ControlList ctrls(context_.sensorControls);
 	if (frameContext.agc.exposure * frameContext.agc.gain > 0)
@@ -297,7 +299,7 @@ void IPARkISP2::setControls(unsigned int frame, const IPAFrameContext &frameCont
 				     exposure, frameContext.agc.gain);
 	ctrls.set(V4L2_CID_VBLANK, static_cast<int32_t>(vblank));
 
-	setSensorControls.emit(frame, ctrls);
+	return ctrls;
 }
 
 void IPARkISP2::updateControls(ControlInfoMap *ipaControls)

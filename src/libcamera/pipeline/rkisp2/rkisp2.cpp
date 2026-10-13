@@ -74,6 +74,21 @@ const std::map<PixelFormat, uint32_t> rawFormats = {
 	{ formats::SRGGB12, MEDIA_BUS_FMT_SRGGB12_1X12 },
 };
 
+/*
+ * Packed raw formats. VICAP can write them directly for raw streams; the ISP
+ * path keeps using the unpacked formats above.
+ */
+const std::map<PixelFormat, uint32_t> packedRawFormats = {
+	{ formats::SBGGR10_CSI2P, MEDIA_BUS_FMT_SBGGR10_1X10 },
+	{ formats::SGBRG10_CSI2P, MEDIA_BUS_FMT_SGBRG10_1X10 },
+	{ formats::SGRBG10_CSI2P, MEDIA_BUS_FMT_SGRBG10_1X10 },
+	{ formats::SRGGB10_CSI2P, MEDIA_BUS_FMT_SRGGB10_1X10 },
+	{ formats::SBGGR12_CSI2P, MEDIA_BUS_FMT_SBGGR12_1X12 },
+	{ formats::SGBRG12_CSI2P, MEDIA_BUS_FMT_SGBRG12_1X12 },
+	{ formats::SGRBG12_CSI2P, MEDIA_BUS_FMT_SGRBG12_1X12 },
+	{ formats::SRGGB12_CSI2P, MEDIA_BUS_FMT_SRGGB12_1X12 },
+};
+
 LOG_DEFINE_CATEGORY(RkISP2)
 
 class PipelineHandlerRkISP2;
@@ -626,12 +641,15 @@ CameraConfiguration::Status RkISP2CameraConfiguration::validate()
 	}
 
 	if (!usingIsp) {
-		if (!rawFormats.count(cfg.pixelFormat)) {
+		if (!rawFormats.count(cfg.pixelFormat) &&
+		    !packedRawFormats.count(cfg.pixelFormat)) {
 			cfg.pixelFormat = formats::SRGGB10;
 			status = Adjusted;
 		}
 
-		unsigned int mbusCode = rawFormats.at(cfg.pixelFormat);
+		unsigned int mbusCode = rawFormats.count(cfg.pixelFormat)
+				      ? rawFormats.at(cfg.pixelFormat)
+				      : packedRawFormats.at(cfg.pixelFormat);
 		auto sizes = sensor->sizes(mbusCode);
 
 		Size bestSize;
@@ -750,6 +768,10 @@ PipelineHandlerRkISP2::generateConfiguration(Camera *camera,
 	std::transform(rawFormats.begin(), rawFormats.end(),
 		       std::inserter(streamFormats, streamFormats.end()),
 		       makeStream);
+	if (isRaw)
+		std::transform(packedRawFormats.begin(), packedRawFormats.end(),
+			       std::inserter(streamFormats, streamFormats.end()),
+			       makeStream);
 
 	StreamFormats formats(streamFormats);
 	StreamConfiguration cfg(formats);
@@ -810,6 +832,12 @@ int PipelineHandlerRkISP2::configure(Camera *camera,
 	PixelFormat vicapPixelFormat =
 		data->getSensorFormat(format.code, format.size, maxSize);
 
+	/* A raw stream may ask for the packed layout, which VICAP writes as is. */
+	const auto packed = packedRawFormats.find(cfg.pixelFormat);
+	if (data->isRaw_ && packed != packedRawFormats.end() &&
+	    packed->second == format.code)
+		vicapPixelFormat = cfg.pixelFormat;
+
 	V4L2DeviceFormat vicapOutputFormat;
 	vicapOutputFormat.fourcc = data->video_->toV4L2PixelFormat(vicapPixelFormat);
 	vicapOutputFormat.size = format.size;
@@ -818,6 +846,13 @@ int PipelineHandlerRkISP2::configure(Camera *camera,
 	ret = data->video_->setFormat(&vicapOutputFormat);
 	if (ret)
 		return ret;
+
+	if (vicapPixelFormat == cfg.pixelFormat && packed != packedRawFormats.end() &&
+	    vicapOutputFormat.fourcc != data->video_->toV4L2PixelFormat(vicapPixelFormat)) {
+		LOG(RkISP2, Error)
+			<< "VICAP does not support " << vicapPixelFormat;
+		return -EINVAL;
+	}
 
 	if (!data->usingIsp_ || data->isRaw_) {
 		cfg.setStream(&data->stream_);

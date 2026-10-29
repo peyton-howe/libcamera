@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: CC0-1.0
+%YAML 1.1
+---
+version: 1
+# Not a calibrated tuning: it turns on the algorithms so that auto exposure and
+# white balance run. White balance is grey world and there is no colour matrix,
+# so colours are approximate.
+algorithms:
+  - Crop:
+  - ColorSpaceConversion:
+  - Agc:
+      AeMeteringMode:
+        MeteringCentreWeighted: [ 0, 0, 0, 0, 0, 0, 6, 8, 6, 0, 0, 8, 16, 8, 0, 0, 6, 8, 6, 0, 0, 0, 0, 0, 0 ]
+      AeExposureMode:
+        ExposureNormal:
+          exposureTime: [ 100, 10000, 30000, 60000, 120000 ]
+          gain: [ 1.2, 2.0, 4.0, 6.0, 6.0 ]
+      AeConstraintMode:
+        ConstraintNormal:
+          lower:
+            qLo: 0.98
+            qHi: 1.0
+            yTarget: 0.1
+      relativeLuminanceTarget: 0.1
+  - Awb:
+  # The IMX415 black level is 50 at 10 bits, which is 3200 in 16-bit units.
+  - BlackLevelSubtraction:
+      R: 3200
+      Gr: 3200
+      Gb: 3200
+      B: 3200
+  - GammaOutCorrection:
+      gamma: 2.2
+...

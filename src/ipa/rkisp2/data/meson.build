@@ -3,7 +3,10 @@
 conf_files = files([
     'imx219.yaml',
     'imx415.yaml',
+    'imx477.yaml',
+    'imx519.yaml',
     'imx708.yaml',
+    'ov5647.yaml',
     'uncalibrated.yaml',
 ])
 

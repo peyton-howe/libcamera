@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: CC0-1.0
+%YAML 1.1
+---
+version: 1
+# Starting point for the IMX477, not a calibration made with the rkisp2:
+# the colour matrices are the ones Raspberry Pi measured for this sensor
+# (src/ipa/rpi/vc4/data/imx477.json), white balance is grey world and there is no
+# lens shading correction.
+algorithms:
+  - Agc:
+      AeMeteringMode:
+        MeteringCentreWeighted: [0, 0, 0, 0, 0, 0, 6, 8, 6, 0, 0, 8, 16, 8, 0, 0, 6, 8, 6, 0, 0, 0, 0, 0, 0]
+        MeteringSpot: [0, 0, 0, 0, 0, 0, 2, 4, 2, 0, 0, 4, 16, 4, 0, 0, 2, 4, 2, 0, 0, 0, 0, 0, 0]
+        MeteringMatrix: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+      AeExposureMode:
+        ExposureNormal:
+          exposureTime: [ 100, 10000, 30000, 60000, 120000 ]
+          gain: [ 1.0, 2.0, 4.0, 6.0, 8.0 ]
+        ExposureShort:
+          exposureTime: [ 100, 5000, 10000, 20000, 120000 ]
+          gain: [ 1.0, 2.0, 4.0, 6.0, 8.0 ]
+      AeConstraintMode:
+        ConstraintNormal:
+          lower:
+            qLo: 0.98
+            qHi: 1.0
+            yTarget: [0, 0.65, 1000, 0.65]
+        ConstraintHighlight:
+          lower:
+            qLo: 0.98
+            qHi: 1.0
+            yTarget: [0, 0.5, 1000, 0.5]
+          upper:
+            qLo: 0.98
+            qHi: 1.0
+            yTarget: [0, 0.8, 1000, 0.5]
+      relativeLuminanceTarget: 0.5
+  - Awb:
+  # The IMX477 black level is 64 at 10 bits, which is 4096 in 16-bit units.
+  - BlackLevelSubtraction:
+      R: 4096
+      Gr: 4096
+      Gb: 4096
+      B: 4096
+  - Ccm:
+      ccms:
+        - ct: 2850
+          ccm: [ 1.97469, -0.71439, -0.26031, -0.43521, 2.09769, -0.66248, -0.04826, -0.84642, 1.89468 ]
+        - ct: 2960
+          ccm: [ 2.12952, -0.91185, -0.21768, -0.38018, 1.90789, -0.52771, 0.03988, -1.10079, 2.06092 ]
+        - ct: 3580
+          ccm: [ 2.03422, -0.80048, -0.23374, -0.39089, 1.97221, -0.58132, -0.08969, -0.61439, 1.70408 ]
+        - ct: 4559
+          ccm: [ 2.15423, -0.98143, -0.17279, -0.38131, 2.14763, -0.76632, -0.10069, -0.54383, 1.64452 ]
+        - ct: 5881
+          ccm: [ 2.18464, -0.95493, -0.22971, -0.36826, 2.00298, -0.63471, -0.15219, -0.38055, 1.53274 ]
+        - ct: 7600
+          ccm: [ 2.30687, -0.97295, -0.33392, -0.30872, 2.32779, -1.01908, -0.17761, -0.55891, 1.73651 ]
+  - GammaOutCorrection:
+      gamma: 2.2
+  - ColorSpaceConversion:
+...

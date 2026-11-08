@@ -44,7 +44,8 @@
 
 namespace libcamera {
 
-static const Size ispMaxSize = Size(4416, 3312);
+/* The ISP input limit, which is also the main path output limit. */
+static const Size ispMaxSize = Size(4672, 3504);
 static const Size vicapMaxSize = Size(8192, 8192);
 
 /* \todo Re-add NV21 and YUV422 and YVU422 after it's fixed in the driver */

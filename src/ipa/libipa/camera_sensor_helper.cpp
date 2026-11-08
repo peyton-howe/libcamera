@@ -656,6 +656,17 @@ public:
 };
 REGISTER_CAMERA_SENSOR_HELPER("imx471", CameraSensorHelperImx471)
 
+class CameraSensorHelperImx519 : public CameraSensorHelper
+{
+public:
+	CameraSensorHelperImx519()
+	{
+		/* gain = 1024/(1024 - code); code = [0, 960]; max gain = x16 */
+		gain_ = AnalogueGainLinear{ 0, 1024, -1, 1024 };
+	}
+};
+REGISTER_CAMERA_SENSOR_HELPER("imx519", CameraSensorHelperImx519)
+
 class CameraSensorHelperImx477 : public CameraSensorHelper
 {
 public:

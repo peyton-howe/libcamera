@@ -12,11 +12,11 @@ algorithms:
       AeMeteringMode:
         MeteringCentreWeighted: [ 0, 0, 0, 0, 0, 0, 6, 8, 6, 0, 0, 8, 16, 8, 0, 0, 6, 8, 6, 0, 0, 0, 0, 0, 0 ]
       AeExposureMode:
-        ExposureNormal:
+        Normal:
           exposureTime: [ 100, 10000, 30000, 60000, 120000 ]
           gain: [ 1.2, 2.0, 4.0, 6.0, 6.0 ]
       AeConstraintMode:
-        ConstraintNormal:
+        Normal:
           lower:
             qLo: 0.98
             qHi: 1.0

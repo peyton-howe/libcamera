@@ -151,6 +151,7 @@ public:
 	int init(bool usingIsp, RkISP2Resources &&resources);
 	PixelFormat getSensorFormat(unsigned int mbusCode, const Size &size,
 				    const Size &maxSize);
+	unsigned int defaultRawMbusCode() const;
 
 	PipelineHandlerRkISP2 *pipe();
 	const PipelineHandlerRkISP2 *pipe() const;
@@ -356,6 +357,33 @@ int RkISP2CameraData::init(bool usingIsp, RkISP2Resources &&resources)
 	}
 
 	return 0;
+}
+
+/*
+ * The sensor's own raw media bus code, preferring 10 bits. Sensors differ in
+ * their Bayer order (the IMX415 is GBRG, not RGGB), so a fixed default would
+ * ask for a code the sensor does not have.
+ */
+unsigned int RkISP2CameraData::defaultRawMbusCode() const
+{
+	unsigned int fallback = 0;
+
+	for (unsigned int code : sensor_->mbusCodes()) {
+		const auto it = std::find_if(rawFormats.begin(), rawFormats.end(),
+					     [code](const auto &value) { return value.second == code; });
+		if (it == rawFormats.end())
+			continue;
+
+		if (code == MEDIA_BUS_FMT_SBGGR10_1X10 ||
+		    code == MEDIA_BUS_FMT_SGBRG10_1X10 ||
+		    code == MEDIA_BUS_FMT_SGRBG10_1X10 ||
+		    code == MEDIA_BUS_FMT_SRGGB10_1X10)
+			return code;
+		if (!fallback)
+			fallback = code;
+	}
+
+	return fallback ? fallback : MEDIA_BUS_FMT_SRGGB10_1X10;
 }
 
 PixelFormat RkISP2CameraData::getSensorFormat(unsigned int mbusCode,
@@ -644,7 +672,10 @@ CameraConfiguration::Status RkISP2CameraConfiguration::validate()
 	if (!usingIsp) {
 		if (!rawFormats.count(cfg.pixelFormat) &&
 		    !packedRawFormats.count(cfg.pixelFormat)) {
-			cfg.pixelFormat = formats::SRGGB10;
+			unsigned int code = data_->defaultRawMbusCode();
+			const auto it = std::find_if(rawFormats.begin(), rawFormats.end(),
+						     [code](const auto &value) { return value.second == code; });
+			cfg.pixelFormat = it != rawFormats.end() ? it->first : formats::SRGGB10;
 			status = Adjusted;
 		}
 
@@ -730,7 +761,7 @@ Size PipelineHandlerRkISP2::clampSensorSize(RkISP2CameraData *data, unsigned int
 			return *it;
 	}
 
-	return *sizes.begin();
+	return sizes.empty() ? Size() : *sizes.begin();
 }
 
 std::unique_ptr<CameraConfiguration>
@@ -753,7 +784,7 @@ PipelineHandlerRkISP2::generateConfiguration(Camera *camera,
 	Size maxSize = isRaw ? vicapMaxSize : ispMaxSize;
 
 	Size defaultSize = { 1920, 1080 };
-	unsigned int defaultMbusCode = MEDIA_BUS_FMT_SRGGB10_1X10;
+	unsigned int defaultMbusCode = data->defaultRawMbusCode();
 	PixelFormat rawFormat = data->getSensorFormat(defaultMbusCode,
 						      defaultSize, maxSize);
 
